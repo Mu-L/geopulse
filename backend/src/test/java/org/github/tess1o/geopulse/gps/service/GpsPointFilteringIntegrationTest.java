@@ -93,6 +93,47 @@ class GpsPointFilteringIntegrationTest {
     }
 
     @Test
+    void testGpsLogger_SpeedConvertedFromMsToKmh() {
+        // Given: GPSLogger sends OwnTracks-compatible payload but speed is in m/s
+        OwnTracksLocationMessage message = OwnTracksLocationMessage.builder()
+                .lat(40.7128)
+                .lon(-74.0060)
+                .acc(50.0)
+                .vel(30.0) // 30 m/s = 108 km/h
+                .tst(Instant.now().getEpochSecond())
+                .build();
+
+        // When: Map and filter as GPSLOGGER source
+        GpsPointEntity entity = mapper.toEntity(message, testUser, "test-device", GpsSourceType.GPSLOGGER);
+        GpsFilterResult result = filteringService.filter(entity, config);
+
+        // Then: Point is accepted and speed is converted to km/h
+        assertTrue(result.isAccepted());
+        assertEquals(108.0, entity.getVelocity(), 0.1);
+    }
+
+    @Test
+    void testGpsLogger_ExcessiveSpeedInMs_RejectedAfterConversion() {
+        // Given: 80 m/s from GPSLogger should become 288 km/h and be rejected
+        OwnTracksLocationMessage message = OwnTracksLocationMessage.builder()
+                .lat(40.7128)
+                .lon(-74.0060)
+                .acc(50.0)
+                .vel(80.0)
+                .tst(Instant.now().getEpochSecond())
+                .build();
+
+        // When
+        GpsPointEntity entity = mapper.toEntity(message, testUser, "test-device", GpsSourceType.GPSLOGGER);
+        GpsFilterResult result = filteringService.filter(entity, config);
+
+        // Then
+        assertTrue(result.isRejected());
+        assertEquals(288.0, entity.getVelocity(), 0.1);
+        assertTrue(result.getRejectionReason().toLowerCase(Locale.ROOT).contains("speed"));
+    }
+
+    @Test
     void testOverland_SpeedConvertedFromMsToKmh() {
         // Given: Overland message with speed in m/s
         OverlandLocationMessage message = createOverlandMessage(

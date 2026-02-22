@@ -580,6 +580,7 @@ const filters = ref({
 // Source type options for multi-select
 const sourceTypeOptions = ref([
   { label: 'OwnTracks', value: 'OWNTRACKS' },
+  { label: 'GPSLogger', value: 'GPSLOGGER' },
   { label: 'Overland', value: 'OVERLAND' },
   { label: 'Google Timeline', value: 'GOOGLE_TIMELINE' },
   { label: 'GPX', value: 'GPX' },
@@ -725,6 +726,7 @@ const formatDateForAPI = (date, isEndDate = false) => {
 const getSourceSeverity = (sourceType) => {
   const severityMap = {
     'OWNTRACKS': 'success',
+    'GPSLOGGER': 'success',
     'OVERLAND': 'info',
     'MANUAL': 'warning',
     'IMPORT': 'secondary',

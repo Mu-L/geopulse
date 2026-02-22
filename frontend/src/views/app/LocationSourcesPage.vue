@@ -12,13 +12,13 @@
               <h1 class="page-title">Location Data Sources</h1>
               <p class="page-description">
                 Configure how GeoPulse receives your location data from different tracking apps.
-                Set up OwnTracks, Overland, Dawarich, or Home Assistant to automatically sync your location history.
+                Set up OwnTracks, GPSLogger, Overland, Dawarich, or Home Assistant to automatically sync your location history.
               </p>
             </div>
             <Button 
               label="Add New Source" 
               icon="pi pi-plus"
-              @click="showAddDialog = true"
+              @click="openAddDialog()"
               class="add-source-btn"
               data-tour="add-source-btn"
             />
@@ -48,6 +48,22 @@
                   outlined 
                   size="small"
                   @click="startQuickSetup('OWNTRACKS')"
+                />
+              </div>
+
+              <div class="source-option">
+                <div class="source-header">
+                  <i class="pi pi-compass text-2xl text-cyan-500"></i>
+                  <div>
+                    <h3 class="source-name">GPSLogger</h3>
+                    <p class="source-description">Android app using HTTP + Basic Auth with OwnTracks-compatible payloads</p>
+                  </div>
+                </div>
+                <Button
+                  label="Setup GPSLogger"
+                  outlined
+                  size="small"
+                  @click="startQuickSetup('GPSLOGGER')"
                 />
               </div>
               
@@ -337,6 +353,82 @@
                   </div>
                 </div>
               </div>
+
+              <!-- GPSLogger Tab -->
+              <div v-if="activeTab === 'gpslogger' && hasGpsLoggerSource">
+                <div class="instruction-content">
+                  <h3 class="instruction-title">GPSLogger Configuration</h3>
+                  <div class="instruction-steps">
+                    <div class="step">
+                      <div class="step-number">1</div>
+                      <div class="step-content">
+                        <div class="step-title">Enable Custom URL Logging</div>
+                        <div class="step-value">In GPSLogger, enable <strong>Log to custom URL</strong>.</div>
+                      </div>
+                    </div>
+
+                    <div class="step">
+                      <div class="step-number">2</div>
+                      <div class="step-content">
+                        <div class="step-title">URL</div>
+                        <div class="copy-field">
+                          <code>{{ getGpsLoggerUrl() }}</code>
+                          <Button
+                            icon="pi pi-copy"
+                            size="small"
+                            outlined
+                            @click="copyToClipboard(getGpsLoggerUrl())"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="step">
+                      <div class="step-number">3</div>
+                      <div class="step-content">
+                        <div class="step-title">HTTP Method</div>
+                        <div class="step-value">POST</div>
+                      </div>
+                    </div>
+
+                    <div class="step">
+                      <div class="step-number">4</div>
+                      <div class="step-content">
+                        <div class="step-title">HTTP Body (JSON)</div>
+                        <div class="copy-field">
+                          <pre class="yaml-config">{{ getGpsLoggerHttpBody() }}</pre>
+                          <Button
+                            icon="pi pi-copy"
+                            size="small"
+                            outlined
+                            @click="copyToClipboard(getGpsLoggerHttpBody())"
+                          />
+                        </div>
+                        <small class="text-muted">GeoPulse treats GPSLogger speed as m/s and converts it to km/h automatically.</small>
+                      </div>
+                    </div>
+
+                    <div class="step">
+                      <div class="step-number">5</div>
+                      <div class="step-content">
+                        <div class="step-title">Headers</div>
+                        <div class="step-value">
+                          Add <code>Content-Type: application/json</code><br>
+                          Optional: <code>X-Limit-D: my-android-phone</code>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="step">
+                      <div class="step-number">6</div>
+                      <div class="step-content">
+                        <div class="step-title">Authentication</div>
+                        <div class="step-value">Enable <strong>Basic Authentication</strong> and use the username/password from this source.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               <!-- Dawarich Tab -->
               <div v-if="activeTab === 'dawarich' && hasDawarichSource">
@@ -431,6 +523,7 @@
         <Dialog 
           v-model:visible="showAddDialog"
           :header="isEditMode ? 'Edit Location Source' : 'Add Location Source'"
+          @hide="handleDialogHide"
           modal
           class="source-dialog"
         >
@@ -453,8 +546,8 @@
               </div>
             </div>
 
-            <div v-if="formData.type === 'OWNTRACKS'" class="form-section">
-              <div class="form-field">
+            <div v-if="formData.type === 'OWNTRACKS' || formData.type === 'GPSLOGGER'" class="form-section">
+              <div v-if="formData.type === 'OWNTRACKS'" class="form-field">
                 <label for="connectionType" class="form-label">Connection Type</label>
                 <div class="connection-type-selection">
                   <div 
@@ -478,6 +571,10 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div v-if="formData.type === 'GPSLOGGER'" class="step-value">
+                GPSLogger uses HTTP only and sends an OwnTracks-compatible payload.
               </div>
               
               <div class="form-field">
@@ -626,6 +723,12 @@ const sourceTypes = [
     icon: 'pi pi-mobile'
   },
   {
+    value: 'GPSLOGGER',
+    label: 'GPSLogger',
+    description: 'Android GPSLogger app via HTTP + Basic Auth (OwnTracks-compatible payload)',
+    icon: 'pi pi-compass'
+  },
+  {
     value: 'OVERLAND',
     label: 'Overland',
     description: 'Simple HTTP endpoint with token-based authentication',
@@ -662,6 +765,10 @@ const hasOwnTracksMqtt = computed(() =>
 
 const hasOverlandSource = computed(() => 
   gpsSourceConfigs.value.some(source => source.type === 'OVERLAND')
+)
+
+const hasGpsLoggerSource = computed(() =>
+  gpsSourceConfigs.value.some(source => source.type === 'GPSLOGGER')
 )
 
 const hasDawarichSource = computed(() => 
@@ -723,6 +830,13 @@ const tabItems = computed(() => {
       label: 'Overland', 
       icon: 'pi pi-map',
       key: 'overland'
+    })
+  }
+  if (hasGpsLoggerSource.value) {
+    tabs.push({
+      label: 'GPSLogger',
+      icon: 'pi pi-compass',
+      key: 'gpslogger'
     })
   }
   if (hasDawarichSource.value) {
@@ -790,6 +904,7 @@ const getDefaultFiltering = () => {
 // Methods
 const getSourceIcon = (type) => {
   if (type === 'OWNTRACKS') return 'pi pi-mobile'
+  if (type === 'GPSLOGGER') return 'pi pi-compass'
   if (type === 'OVERLAND') return 'pi pi-map'
   if (type === 'DAWARICH') return 'pi pi-key'
   if (type === 'HOME_ASSISTANT') return 'pi pi-home'
@@ -798,6 +913,7 @@ const getSourceIcon = (type) => {
 
 const getSourceDisplayName = (type) => {
   if (type === 'OWNTRACKS') return 'OwnTracks'
+  if (type === 'GPSLOGGER') return 'GPSLogger'
   if (type === 'OVERLAND') return 'Overland'
   if (type === 'DAWARICH') return 'Dawarich'
   if (type === 'HOME_ASSISTANT') return 'Home Assistant'
@@ -806,6 +922,7 @@ const getSourceDisplayName = (type) => {
 
 const getSourceIdentifier = (source) => {
   if (source.type === 'OWNTRACKS') return source.username || 'No username'
+  if (source.type === 'GPSLOGGER') return source.username || 'No username'
   if (source.type === 'OVERLAND') return source.token ? `Token: ${source.token.substring(0, 8)}...` : 'No token'
   if (source.type === 'DAWARICH') return source.token ? `API Key: ${source.token.substring(0, 8)}...` : 'No API key'
   if (source.type === 'HOME_ASSISTANT') return source.token ? `Token: ${source.token.substring(0, 8)}...` : 'No token'
@@ -821,14 +938,10 @@ const handleTabChange = (event) => {
 }
 
 const startQuickSetup = (type) => {
+  isEditMode.value = false
+  editingSource.value = null
+  resetDialogForm()
   formData.value.type = type
-  // Pre-populate with default values from backend
-  const defaults = getDefaultFiltering()
-  formData.value.filterInaccurateData = defaults.filterInaccurateData
-  formData.value.maxAllowedAccuracy = defaults.maxAllowedAccuracy
-  formData.value.maxAllowedSpeed = defaults.maxAllowedSpeed
-  formData.value.enableDuplicateDetection = defaults.enableDuplicateDetection
-  formData.value.duplicateDetectionThresholdMinutes = defaults.duplicateDetectionThresholdMinutes
   showAddDialog.value = true
 }
 
@@ -845,6 +958,31 @@ const showInstructions = (source) => {
   activeInstructionTab.value = tabKey
   // Scroll to instructions
   document.querySelector('.instructions-card')?.scrollIntoView({ behavior: 'smooth' })
+}
+
+const resetDialogForm = () => {
+  // Reset form with default values from backend
+  const defaults = getDefaultFiltering()
+  formData.value = {
+    type: 'OWNTRACKS',
+    username: '',
+    password: '',
+    token: '',
+    connectionType: 'HTTP',
+    filterInaccurateData: defaults.filterInaccurateData,
+    maxAllowedAccuracy: defaults.maxAllowedAccuracy,
+    maxAllowedSpeed: defaults.maxAllowedSpeed,
+    enableDuplicateDetection: defaults.enableDuplicateDetection,
+    duplicateDetectionThresholdMinutes: defaults.duplicateDetectionThresholdMinutes
+  }
+  formErrors.value = {}
+}
+
+const openAddDialog = () => {
+  isEditMode.value = false
+  editingSource.value = null
+  resetDialogForm()
+  showAddDialog.value = true
 }
 
 const editSource = (source) => {
@@ -867,29 +1005,20 @@ const editSource = (source) => {
 
 const closeDialog = () => {
   showAddDialog.value = false
+}
+
+const handleDialogHide = () => {
+  // PrimeVue Dialog closes on ESC / close icon / mask interaction without calling closeDialog().
+  // Reset transient dialog state here so the next open starts in create mode.
   isEditMode.value = false
   editingSource.value = null
-  // Reset form with default values from backend
-  const defaults = getDefaultFiltering()
-  formData.value = {
-    type: 'OWNTRACKS',
-    username: '',
-    password: '',
-    token: '',
-    connectionType: 'HTTP',
-    filterInaccurateData: defaults.filterInaccurateData,
-    maxAllowedAccuracy: defaults.maxAllowedAccuracy,
-    maxAllowedSpeed: defaults.maxAllowedSpeed,
-    enableDuplicateDetection: defaults.enableDuplicateDetection,
-    duplicateDetectionThresholdMinutes: defaults.duplicateDetectionThresholdMinutes
-  }
-  formErrors.value = {}
+  resetDialogForm()
 }
 
 const validateForm = () => {
   formErrors.value = {}
   
-  if (formData.value.type === 'OWNTRACKS') {
+  if (formData.value.type === 'OWNTRACKS' || formData.value.type === 'GPSLOGGER') {
     if (!formData.value.username) {
       formErrors.value.username = 'Username is required'
     }
@@ -931,13 +1060,13 @@ const saveSource = async () => {
         life: 3000
       })
     } else {
-      if (formData.value.type === 'OWNTRACKS') {
+      if (formData.value.type === 'OWNTRACKS' || formData.value.type === 'GPSLOGGER') {
         await gpsStore.addGpsConfigSource(
           formData.value.type,
           formData.value.username,
           formData.value.password,
           null, // token not used for OwnTracks
-          formData.value.connectionType,
+          formData.value.type === 'OWNTRACKS' ? formData.value.connectionType : 'HTTP',
           formData.value.filterInaccurateData,
           formData.value.maxAllowedAccuracy,
           formData.value.maxAllowedSpeed,
@@ -1082,8 +1211,27 @@ const getOverlandUrl = () => {
   return `${window.location.origin}/api/overland`
 }
 
+const getGpsLoggerUrl = () => {
+  return `${window.location.origin}/api/gpslogger`
+}
+
 const getDawarichUrl = () => {
   return `${window.location.origin}/api/dawarich`
+}
+
+const getGpsLoggerHttpBody = () => {
+  return `{
+  "_type": "location",
+  "t": "u",
+  "acc": "%ACC",
+  "alt": "%ALT",
+  "batt": "%BATT",
+  "bs": "%ISCHARGING",
+  "lat": "%LAT",
+  "lon": "%LON",
+  "tst": "%TIMESTAMP",
+  "vel": "%SPD"
+}`
 }
 
 

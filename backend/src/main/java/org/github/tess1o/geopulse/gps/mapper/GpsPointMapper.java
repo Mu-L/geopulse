@@ -29,7 +29,12 @@ public class GpsPointMapper {
         entity.setTimestamp(Instant.ofEpochSecond(message.getTst()));
         entity.setAccuracy(message.getAcc());
         entity.setBattery(message.getBatt());
-        entity.setVelocity(message.getVel());
+        // OwnTracks reports km/h, but GPSLogger sends OwnTracks-shaped payloads with speed in m/s.
+        Double velocity = message.getVel();
+        if (velocity != null && sourceType == GpsSourceType.GPSLOGGER) {
+            velocity = velocity * 3.6;
+        }
+        entity.setVelocity(velocity);
         entity.setAltitude(message.getAlt());
         entity.setSourceType(sourceType);
         entity.setCreatedAt(Instant.now());

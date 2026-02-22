@@ -78,10 +78,12 @@ public class GpsSourceService implements GpsSourceConfigProvider {
     }
 
     private void validateUniqueness(CreateGpsSourceConfigDto newConfig) {
-        if (newConfig.getType() == GpsSourceType.OWNTRACKS) {
+        if (newConfig.getType() == GpsSourceType.OWNTRACKS || newConfig.getType() == GpsSourceType.GPSLOGGER) {
             boolean isUnique = isOwnTrackSourceUnique(newConfig);
             if (!isUnique) {
-                throw new IllegalArgumentException("Owntrack username is already used");
+                throw new IllegalArgumentException(newConfig.getType() == GpsSourceType.GPSLOGGER
+                        ? "GPSLogger username is already used"
+                        : "Owntrack username is already used");
             }
         } else if (newConfig.getType() == GpsSourceType.OVERLAND) {
             boolean isUnique = isOverlandSourceUnique(newConfig);
@@ -97,7 +99,7 @@ public class GpsSourceService implements GpsSourceConfigProvider {
     }
 
     private boolean isOwnTrackSourceUnique(CreateGpsSourceConfigDto newConfig) {
-        List<GpsSourceConfigEntity> configs = gpsSourceRepository.findByUserIdAndSourceType(newConfig.getUserId(), GpsSourceType.OWNTRACKS);
+        List<GpsSourceConfigEntity> configs = gpsSourceRepository.findByUserIdAndSourceType(newConfig.getUserId(), newConfig.getType());
         if (configs == null || configs.isEmpty()) {
             return true;
         }
@@ -133,7 +135,7 @@ public class GpsSourceService implements GpsSourceConfigProvider {
             return false;
         }
         GpsSourceConfigEntity dbConfig = configOpt.get();
-        if (dbConfig.getSourceType() == GpsSourceType.OWNTRACKS) {
+        if (dbConfig.getSourceType() == GpsSourceType.OWNTRACKS || dbConfig.getSourceType() == GpsSourceType.GPSLOGGER) {
             dbConfig.setUsername(config.getUsername());
             // Only update password if a new one is provided
             if (config.getPassword() != null && !config.getPassword().isEmpty()) {
@@ -176,6 +178,11 @@ public class GpsSourceService implements GpsSourceConfigProvider {
     @Override
     public Optional<GpsSourceConfigEntity> findByUsername(String username) {
         return gpsSourceRepository.findByUsername(username);
+    }
+
+    @Override
+    public Optional<GpsSourceConfigEntity> findByUsernameAndSourceType(String username, GpsSourceType sourceType) {
+        return gpsSourceRepository.findByUsernameAndSourceType(username, sourceType);
     }
 
     @Override
