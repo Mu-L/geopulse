@@ -35,6 +35,7 @@ import org.github.tess1o.geopulse.streaming.model.shared.TripType;
         TripClassificationDetailsDTO.class,
         // Location Analytics DTOs
         LocationStatisticsDTO.class,
+        LocationAnalyticsMapPlaceDTO.class,
         TopPlaceInLocationDTO.class,
         CitySummaryDTO.class,
         CityDetailsDTO.class,
