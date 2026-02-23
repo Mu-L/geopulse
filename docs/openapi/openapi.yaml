@@ -226,6 +226,11 @@ components:
       properties:
         name:
           type: string
+    CoverageSettingsRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
     CreateExportRequest:
       type: object
       properties:
@@ -577,6 +582,7 @@ components:
     GpsSourceType:
       enum:
       - OWNTRACKS
+      - GPSLOGGER
       - OVERLAND
       - GOOGLE_TIMELINE
       - GPX
@@ -2307,6 +2313,92 @@ paths:
       summary: Get Auth Status
       tags:
       - Authentication Resource
+  /api/coverage/cells:
+    get:
+      parameters:
+      - name: bbox
+        in: query
+        schema:
+          type: string
+      - name: grid
+        in: query
+        schema:
+          format: int32
+          type: integer
+      - name: limit
+        in: query
+        schema:
+          format: int32
+          minimum: 1
+          type: integer
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Coverage Cells
+      tags:
+      - Coverage Resource
+      security:
+      - jwt: []
+  /api/coverage/settings:
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CoverageSettingsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Update Coverage Settings
+      tags:
+      - Coverage Resource
+      security:
+      - jwt: []
+  /api/coverage/status:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Coverage Status
+      tags:
+      - Coverage Resource
+      security:
+      - jwt: []
+  /api/coverage/summary:
+    get:
+      parameters:
+      - name: grid
+        in: query
+        schema:
+          format: int32
+          type: integer
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Coverage Summary
+      tags:
+      - Coverage Resource
+      security:
+      - jwt: []
   /api/dawarich/api/v1/health:
     get:
       responses:
@@ -3876,6 +3968,28 @@ paths:
       - Gps Point Resource
       security:
       - jwt: []
+  /api/gpslogger:
+    post:
+      parameters:
+      - name: X-Limit-D
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Handle Gps Logger
+      tags:
+      - Gps Logger Resource
   /api/health:
     get:
       responses:
@@ -4383,6 +4497,61 @@ paths:
         "403":
           description: Not Allowed
       summary: Export Country Visits
+      tags:
+      - Location Analytics Resource
+      security:
+      - jwt: []
+  /api/location-analytics/map/places:
+    get:
+      parameters:
+      - name: from
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          format: int32
+          default: "3000"
+          type: integer
+      - name: maxLat
+        in: query
+        schema:
+          format: double
+          type: number
+      - name: maxLon
+        in: query
+        schema:
+          format: double
+          type: number
+      - name: minLat
+        in: query
+        schema:
+          format: double
+          type: number
+      - name: minLon
+        in: query
+        schema:
+          format: double
+          type: number
+      - name: minVisits
+        in: query
+        schema:
+          format: int32
+          default: "1"
+          type: integer
+      - name: to
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Map Places
       tags:
       - Location Analytics Resource
       security:
@@ -5612,7 +5781,7 @@ paths:
       - Version Resource
 info:
   title: GeoPulse API
-  version: 1.17.0
+  version: 1.18.0
   description: GeoPulse backend REST API documentation.
   contact:
     name: tess1o
