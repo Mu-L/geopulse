@@ -42,6 +42,27 @@ export const normalizePeriodTagColor = (color) => {
   return color.startsWith('#') ? color : `#${color}`
 }
 
+const formatDateForTimelineQuery = (dateValue) => {
+  const timestamp = toEpochMs(dateValue)
+  if (timestamp === null) return null
+
+  const date = new Date(timestamp)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${month}/${day}/${year}`
+}
+
+export const buildTimelineQueryForPeriodTag = (tag) => {
+  if (!tag?.startTime) return null
+
+  const start = formatDateForTimelineQuery(tag.startTime)
+  const end = formatDateForTimelineQuery(tag.endTime || new Date())
+  if (!start || !end) return null
+
+  return { start, end }
+}
+
 export const findMatchingPeriodTagForInterval = (startTime, endTime, periodTags = []) => {
   const visitStartMs = toEpochMs(startTime)
   if (visitStartMs === null) return null

@@ -107,6 +107,12 @@
             class="trip-tag-chip"
             :style="{ '--trip-tag-color': getVisitTripTagColor(slotProps.data) }"
             :title="`Part of trip: ${getVisitTripTag(slotProps.data).tagName}`"
+            role="button"
+            tabindex="0"
+            :aria-label="`View ${getVisitTripTag(slotProps.data).tagName} period in timeline`"
+            @click.stop="handleTripTagClick(getVisitTripTag(slotProps.data))"
+            @keydown.enter="handleTripTagClick(getVisitTripTag(slotProps.data))"
+            @keydown.space.prevent="handleTripTagClick(getVisitTripTag(slotProps.data))"
           >
             <span class="trip-tag-dot"></span>
             {{ getVisitTripTag(slotProps.data).tagName }}
@@ -193,6 +199,7 @@ import { formatDurationSmart } from '@/utils/calculationsHelpers'
 import { useTimezone } from '@/composables/useTimezone'
 import apiService from '@/utils/apiService'
 import {
+  buildTimelineQueryForPeriodTag,
   findMatchingPeriodTagForVisit,
   getEpochMs,
   normalizePeriodTagColor
@@ -325,6 +332,16 @@ const handleCityClick = (cityName) => {
   if (props.enableCityNavigation && cityName) {
     router.push(`/app/location-analytics/city/${encodeURIComponent(cityName)}`)
   }
+}
+
+const handleTripTagClick = (tag) => {
+  const query = buildTimelineQueryForPeriodTag(tag)
+  if (!query) return
+
+  router.push({
+    path: '/app/timeline',
+    query
+  })
 }
 
 const loadPeriodTagsForVisibleVisits = async () => {
@@ -483,6 +500,7 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
 }
 
 .trip-tag-dot {
@@ -496,6 +514,11 @@ watch(
 .trip-tag-empty {
   color: var(--gp-text-muted);
   font-size: 0.85rem;
+}
+
+.trip-tag-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--trip-tag-color) 65%, white);
+  outline-offset: 2px;
 }
 
 .no-data-state,

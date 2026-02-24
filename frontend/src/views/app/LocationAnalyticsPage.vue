@@ -116,6 +116,12 @@
                     class="map-place-trip-chip"
                     :style="{ '--trip-tag-color': getPeriodTagColor(getMapPlaceTripTag(place)) }"
                     :title="`Last visit was part of trip: ${getMapPlaceTripTag(place).tagName}`"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="`View ${getMapPlaceTripTag(place).tagName} period in timeline`"
+                    @click.stop="handleMapPlaceTripTagClick(getMapPlaceTripTag(place))"
+                    @keydown.enter="handleMapPlaceTripTagClick(getMapPlaceTripTag(place))"
+                    @keydown.space.prevent="handleMapPlaceTripTagClick(getMapPlaceTripTag(place))"
                   >
                     <span class="map-place-trip-dot"></span>
                     {{ getMapPlaceTripTag(place).tagName }}
@@ -239,6 +245,7 @@ import LocationAnalyticsMap from '@/components/location-analytics/LocationAnalyt
 import { useLocationAnalyticsStore } from '@/stores/locationAnalytics'
 import apiService from '@/utils/apiService'
 import {
+  buildTimelineQueryForPeriodTag,
   findMatchingPeriodTagForTimestamp,
   getEpochMs,
   normalizePeriodTagColor
@@ -327,6 +334,24 @@ const getMapPlaceTripTag = (place) => {
 }
 
 const getPeriodTagColor = (tag) => normalizePeriodTagColor(tag?.color)
+
+const handleMapPlaceTripTagClick = (tag) => {
+  const query = buildTimelineQueryForPeriodTag(tag)
+  if (!query) return
+
+  const resolvedRoute = router.resolve({
+    path: '/app/timeline',
+    query
+  })
+
+  const newWindow = window.open(resolvedRoute.href, '_blank')
+  if (!newWindow) {
+    router.push(resolvedRoute.fullPath)
+    return
+  }
+
+  newWindow.opener = null
+}
 
 const setMapPlaceRef = (place, element) => {
   const key = getPlaceKey(place)
@@ -822,6 +847,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
 }
 
 .map-place-trip-dot {
@@ -830,6 +856,11 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: var(--trip-tag-color);
   flex: 0 0 auto;
+}
+
+.map-place-trip-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--trip-tag-color) 65%, white);
+  outline-offset: 2px;
 }
 
 .map-place-side {
