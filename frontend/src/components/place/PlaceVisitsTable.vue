@@ -94,6 +94,29 @@
 
       <!-- Duration Column -->
       <Column
+        v-if="hasAnyVisitTripTag"
+        header="Trip"
+        :style="{ 'min-width': '170px' }"
+        class="trip-column"
+        headerClass="trip-column"
+        bodyClass="trip-column"
+      >
+        <template #body="slotProps">
+          <span
+            v-if="getVisitTripTag(slotProps.data)"
+            class="trip-tag-chip"
+            :style="{ '--trip-tag-color': getVisitTripTagColor(slotProps.data) }"
+            :title="`Part of trip: ${getVisitTripTag(slotProps.data).tagName}`"
+          >
+            <span class="trip-tag-dot"></span>
+            {{ getVisitTripTag(slotProps.data).tagName }}
+          </span>
+          <span v-else class="trip-tag-empty">-</span>
+        </template>
+      </Column>
+
+      <!-- Duration Column -->
+      <Column
         field="stayDuration"
         header="Duration"
         :sortable="true"
@@ -159,7 +182,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -168,6 +191,12 @@ import ProgressSpinner from 'primevue/progressspinner'
 import BaseCard from '@/components/ui/base/BaseCard.vue'
 import { formatDurationSmart } from '@/utils/calculationsHelpers'
 import { useTimezone } from '@/composables/useTimezone'
+import apiService from '@/utils/apiService'
+import {
+  findMatchingPeriodTagForVisit,
+  getEpochMs,
+  normalizePeriodTagColor
+} from '@/utils/periodTagHelpers'
 
 const timezone = useTimezone()
 const router = useRouter()
@@ -208,6 +237,24 @@ const emit = defineEmits(['page-change', 'sort-change', 'export'])
 const firstRow = ref(0)
 const sortField = ref('timestamp')
 const sortOrder = ref(-1) // -1 for desc, 1 for asc
+const periodTags = ref([])
+const lastPeriodTagsRangeKey = ref('')
+let periodTagsRequestToken = 0
+
+const visitTripTagsByKey = computed(() => {
+  const result = new Map()
+  for (const visit of props.visits || []) {
+    result.set(getVisitKey(visit), findMatchingPeriodTagForVisit(visit, periodTags.value))
+  }
+  return result
+})
+
+const hasAnyVisitTripTag = computed(() => {
+  for (const tag of visitTripTagsByKey.value.values()) {
+    if (tag) return true
+  }
+  return false
+})
 
 const formatDate = (timestamp) => {
   return timezone.format(timestamp, 'YYYY-MM-DD')
@@ -219,6 +266,20 @@ const formatTime = (timestamp) => {
 
 const formatDuration = (seconds) => {
   return formatDurationSmart(seconds || 0)
+}
+
+const getVisitKey = (visit) => {
+  if (!visit) return 'unknown'
+  if (visit.id !== undefined && visit.id !== null) return `id:${visit.id}`
+  return `ts:${visit.timestamp || 'none'}:${visit.locationName || ''}:${visit.city || ''}`
+}
+
+const getVisitTripTag = (visit) => {
+  return visitTripTagsByKey.value.get(getVisitKey(visit)) || null
+}
+
+const getVisitTripTagColor = (visit) => {
+  return normalizePeriodTagColor(getVisitTripTag(visit)?.color)
 }
 
 const getEndDate = (visit) => {
@@ -265,6 +326,63 @@ const handleCityClick = (cityName) => {
     router.push(`/app/location-analytics/city/${encodeURIComponent(cityName)}`)
   }
 }
+
+const loadPeriodTagsForVisibleVisits = async () => {
+  const visits = Array.isArray(props.visits) ? props.visits : []
+  if (!visits.length) {
+    periodTags.value = []
+    lastPeriodTagsRangeKey.value = ''
+    return
+  }
+
+  let minStartMs = Number.POSITIVE_INFINITY
+  let maxEndMs = Number.NEGATIVE_INFINITY
+
+  for (const visit of visits) {
+    const startMs = getEpochMs(visit?.timestamp)
+    if (startMs === null) continue
+
+    const durationSeconds = Number(visit?.stayDuration || 0)
+    const endMs = durationSeconds > 0 ? startMs + (durationSeconds * 1000) : startMs
+
+    if (startMs < minStartMs) minStartMs = startMs
+    if (endMs > maxEndMs) maxEndMs = endMs
+  }
+
+  if (!Number.isFinite(minStartMs) || !Number.isFinite(maxEndMs)) {
+    periodTags.value = []
+    lastPeriodTagsRangeKey.value = ''
+    return
+  }
+
+  const rangeKey = `${minStartMs}:${maxEndMs}`
+  if (rangeKey === lastPeriodTagsRangeKey.value) return
+  lastPeriodTagsRangeKey.value = rangeKey
+
+  const requestToken = ++periodTagsRequestToken
+
+  try {
+    const response = await apiService.get('/period-tags', {
+      startDate: minStartMs,
+      endDate: maxEndMs
+    })
+
+    if (requestToken !== periodTagsRequestToken) return
+    periodTags.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    if (requestToken !== periodTagsRequestToken) return
+    console.error('Failed to load period tags for visits table:', error)
+    periodTags.value = []
+  }
+}
+
+watch(
+  () => props.visits,
+  () => {
+    void loadPeriodTagsForVisibleVisits()
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -348,6 +466,38 @@ const handleCityClick = (cityName) => {
   color: var(--gp-text-primary);
 }
 
+.trip-tag-chip {
+  --trip-tag-color: var(--gp-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--trip-tag-color) 55%, white);
+  background: color-mix(in srgb, var(--trip-tag-color) 10%, white);
+  color: color-mix(in srgb, var(--trip-tag-color) 75%, black);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-tag-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--trip-tag-color);
+  flex: 0 0 auto;
+}
+
+.trip-tag-empty {
+  color: var(--gp-text-muted);
+  font-size: 0.85rem;
+}
+
 .no-data-state,
 .loading-state {
   text-align: center;
@@ -390,6 +540,12 @@ const handleCityClick = (cityName) => {
 
 .p-dark .place-name {
   color: var(--gp-text-primary);
+}
+
+.p-dark .trip-tag-chip {
+  border-color: color-mix(in srgb, var(--trip-tag-color) 45%, var(--gp-border-dark));
+  background: color-mix(in srgb, var(--trip-tag-color) 18%, var(--gp-surface-dark));
+  color: color-mix(in srgb, var(--trip-tag-color) 70%, white);
 }
 
 .p-dark .no-data-title {

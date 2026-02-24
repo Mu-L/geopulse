@@ -111,6 +111,16 @@
                 <div class="map-place-timeline">
                   Last visit: {{ formatLastVisitFull(place.lastVisit) }}
                 </div>
+                <div v-if="getMapPlaceTripTag(place)" class="map-place-trip">
+                  <span
+                    class="map-place-trip-chip"
+                    :style="{ '--trip-tag-color': getPeriodTagColor(getMapPlaceTripTag(place)) }"
+                    :title="`Last visit was part of trip: ${getMapPlaceTripTag(place).tagName}`"
+                  >
+                    <span class="map-place-trip-dot"></span>
+                    {{ getMapPlaceTripTag(place).tagName }}
+                  </span>
+                </div>
               </div>
               <div class="map-place-side">
                 <div class="map-place-visits" :title="`${place.visitCount} visits`">
@@ -227,6 +237,12 @@ import LocationSearchBar from '@/components/search/LocationSearchBar.vue'
 import LocationAnalyticsMap from '@/components/location-analytics/LocationAnalyticsMap.vue'
 
 import { useLocationAnalyticsStore } from '@/stores/locationAnalytics'
+import apiService from '@/utils/apiService'
+import {
+  findMatchingPeriodTagForTimestamp,
+  getEpochMs,
+  normalizePeriodTagColor
+} from '@/utils/periodTagHelpers'
 
 const router = useRouter()
 const route = useRoute()
@@ -263,7 +279,10 @@ const canScrollRailRight = ref(false)
 const mapPlaceRefs = new Map()
 const hoveredMapPlaceKey = ref(null)
 const selectedMapPlaceFocusMode = ref('pan')
+const mapPlacesPeriodTags = ref([])
+const lastMapPlacesPeriodTagsRangeKey = ref('')
 let mapFetchTimer = null
+let mapPlacesPeriodTagsRequestToken = 0
 
 const getPlaceKey = (place) => `${place.type}-${place.id}`
 
@@ -284,6 +303,13 @@ const sortedMapPlaces = computed(() => {
 const mapPlacesPreview = computed(() => sortedMapPlaces.value.slice(0, 60))
 const citiesTabLabel = computed(() => (citiesLoaded.value ? `Cities (${cities.value.length})` : 'Cities'))
 const countriesTabLabel = computed(() => (countriesLoaded.value ? `Countries (${countries.value.length})` : 'Countries'))
+const mapPlaceTripTagsByKey = computed(() => {
+  const result = new Map()
+  for (const place of mapPlacesPreview.value) {
+    result.set(getPlaceKey(place), findMatchingPeriodTagForTimestamp(place?.lastVisit, mapPlacesPeriodTags.value))
+  }
+  return result
+})
 
 const formatLastVisitFull = (timestamp) => {
   if (!timestamp) return 'Unknown'
@@ -295,6 +321,12 @@ const formatLastVisitFull = (timestamp) => {
     day: 'numeric'
   })
 }
+
+const getMapPlaceTripTag = (place) => {
+  return mapPlaceTripTagsByKey.value.get(getPlaceKey(place)) || null
+}
+
+const getPeriodTagColor = (tag) => normalizePeriodTagColor(tag?.color)
 
 const setMapPlaceRef = (place, element) => {
   const key = getPlaceKey(place)
@@ -428,6 +460,51 @@ const fetchMapPlaces = async (viewport, force = false) => {
   }
 }
 
+const loadMapPlacePeriodTags = async (places) => {
+  if (!Array.isArray(places) || places.length === 0) {
+    mapPlacesPeriodTags.value = []
+    lastMapPlacesPeriodTagsRangeKey.value = ''
+    return
+  }
+
+  let minTimestampMs = Number.POSITIVE_INFINITY
+  let maxTimestampMs = Number.NEGATIVE_INFINITY
+
+  for (const place of places) {
+    const timestampMs = getEpochMs(place?.lastVisit)
+    if (timestampMs === null) continue
+
+    if (timestampMs < minTimestampMs) minTimestampMs = timestampMs
+    if (timestampMs > maxTimestampMs) maxTimestampMs = timestampMs
+  }
+
+  if (!Number.isFinite(minTimestampMs) || !Number.isFinite(maxTimestampMs)) {
+    mapPlacesPeriodTags.value = []
+    lastMapPlacesPeriodTagsRangeKey.value = ''
+    return
+  }
+
+  const rangeKey = `${minTimestampMs}:${maxTimestampMs}`
+  if (rangeKey === lastMapPlacesPeriodTagsRangeKey.value) return
+  lastMapPlacesPeriodTagsRangeKey.value = rangeKey
+
+  const requestToken = ++mapPlacesPeriodTagsRequestToken
+
+  try {
+    const response = await apiService.get('/period-tags', {
+      startDate: minTimestampMs,
+      endDate: maxTimestampMs
+    })
+
+    if (requestToken !== mapPlacesPeriodTagsRequestToken) return
+    mapPlacesPeriodTags.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    if (requestToken !== mapPlacesPeriodTagsRequestToken) return
+    console.error('Failed to load period tags for map places rail:', error)
+    mapPlacesPeriodTags.value = []
+  }
+}
+
 const handleMapViewportChange = (viewport) => {
   if (mapFetchTimer) {
     clearTimeout(mapFetchTimer)
@@ -495,9 +572,10 @@ watch(() => route.query.tab, (queryTab) => {
   }
 })
 
-watch(mapPlacesPreview, async () => {
+watch(mapPlacesPreview, async (places) => {
   await nextTick()
   updateRailScrollState()
+  void loadMapPlacePeriodTags(places)
 })
 
 watch(selectedMapPlaceKey, async (selectedKey) => {
@@ -723,6 +801,37 @@ onBeforeUnmount(() => {
   color: var(--gp-text-secondary);
 }
 
+.map-place-trip {
+  margin-top: 0.2rem;
+}
+
+.map-place-trip-chip {
+  --trip-tag-color: var(--gp-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--trip-tag-color) 55%, white);
+  background: color-mix(in srgb, var(--trip-tag-color) 10%, white);
+  color: color-mix(in srgb, var(--trip-tag-color) 78%, black);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-place-trip-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--trip-tag-color);
+  flex: 0 0 auto;
+}
+
 .map-place-side {
   display: flex;
   align-items: center;
@@ -757,6 +866,12 @@ onBeforeUnmount(() => {
 .map-place-item:hover .map-place-open-btn,
 .map-place-item.active .map-place-open-btn {
   opacity: 1;
+}
+
+.p-dark .map-place-trip-chip {
+  border-color: color-mix(in srgb, var(--trip-tag-color) 45%, var(--gp-border-dark));
+  background: color-mix(in srgb, var(--trip-tag-color) 18%, var(--gp-surface-dark));
+  color: color-mix(in srgb, var(--trip-tag-color) 70%, white);
 }
 
 .loading-container {
