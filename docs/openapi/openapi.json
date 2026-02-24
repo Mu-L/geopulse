@@ -1334,19 +1334,12 @@
             "maxLength" : 255,
             "type" : "string"
           },
-          "customMapTileUrl" : {
-            "maxLength" : 1000,
-            "type" : "string"
-          },
           "measureUnit" : {
             "$ref" : "#/components/schemas/MeasureUnit"
           },
           "defaultRedirectUrl" : {
             "maxLength" : 1000,
             "type" : "string"
-          },
-          "userId" : {
-            "$ref" : "#/components/schemas/UUID"
           }
         }
       },
@@ -1679,9 +1672,6 @@
           "newPassword" : {
             "pattern" : "\\S",
             "type" : "string"
-          },
-          "userId" : {
-            "$ref" : "#/components/schemas/UUID"
           }
         }
       },
@@ -8127,7 +8117,7 @@
   },
   "info" : {
     "title" : "GeoPulse API",
-    "version" : "1.18.0",
+    "version" : "1.18.1",
     "description" : "GeoPulse backend REST API documentation.",
     "contact" : {
       "name" : "tess1o",
