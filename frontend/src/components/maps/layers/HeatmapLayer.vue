@@ -4,6 +4,7 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet.heat'
+import { fixLeafletHeatLayerAnimation } from '@/utils/mapHelpers'
 
 const props = defineProps({
   map: {
@@ -204,6 +205,7 @@ watch(
 )
 
 onMounted(() => {
+  fixLeafletHeatLayerAnimation()
   renderHeatLayer()
 })
 

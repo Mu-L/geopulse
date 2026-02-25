@@ -80,6 +80,7 @@
         :min-opacity="heatStyle.minOpacity"
         :max="heatStyle.max"
         :gradient="heatGradient"
+        :lock-max-zoom="layerMode !== 'trips'"
         :enabled="true"
       />
       <!-- Legend -->
@@ -94,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import L from 'leaflet'
 import BaseMap from '@/components/maps/BaseMap.vue'
@@ -115,10 +116,13 @@ const { heatmapLoading: isLoading, heatmapError } = storeToRefs(digestStore)
 
 const baseMapRef  = ref(null)
 const mapInstance = ref(null)
+const mapZoom = ref(8)
 const intensityMode = ref('duration') // 'duration' | 'visits'
-const layerMode = ref('stays') // 'stays' | 'trips'
+const layerMode = ref('trips') // 'stays' | 'trips'
 const lastNonTripIntensity = ref('duration')
 const heatPoints    = ref([])
+let mapZoomHandler = null
+let zoomListenerMap = null
 
 const hasError = computed(() => !!heatmapError.value)
 const hasData  = computed(() => heatPoints.value.length > 0)
@@ -137,15 +141,20 @@ const scaleConfig = computed(() => {
   return {
     combined: { minWeight: 0.04, gamma: 0.6 },
     stays: { minWeight: 0.05, gamma: 0.6 },
-    trips: { minWeight: 0.02, gamma: 1.0 }
+    trips: { minWeight: 0.03, gamma: 0.9 }
   }[layerMode.value] || { minWeight: 0.04, gamma: 0.6 }
 })
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+
 const heatStyle = computed(() => {
+  const tripRadius = clamp(Math.round(9 + (mapZoom.value - 6) * 1.4), 9, 20)
+  const tripBlur = clamp(Math.round(tripRadius * 0.7), 5, 14)
+
   return {
     combined: { radius: 32, blur: 24, minOpacity: 0.25, max: 1.0 },
     stays: { radius: 40, blur: 28, minOpacity: 0.3, max: 1.0 },
-    trips: { radius: 18, blur: 12, minOpacity: 0.2, max: 1.0 }
+    trips: { radius: tripRadius, blur: tripBlur, minOpacity: 0.3, max: 1.0 }
   }[layerMode.value] || { radius: 32, blur: 24, minOpacity: 0.25, max: 1.0 }
 })
 
@@ -197,8 +206,24 @@ const fitMap = () => {
 
 // ─── Events ──────────────────────────────────────────────────────────────────
 
+const detachZoomListener = () => {
+  if (zoomListenerMap && mapZoomHandler) {
+    zoomListenerMap.off('zoomend', mapZoomHandler)
+  }
+  zoomListenerMap = null
+  mapZoomHandler = null
+}
+
 const onMapReady = async (map) => {
+  detachZoomListener()
   mapInstance.value = map
+  mapZoom.value = map.getZoom()
+  mapZoomHandler = () => {
+    mapZoom.value = map.getZoom()
+  }
+  zoomListenerMap = map
+  map.on('zoomend', mapZoomHandler)
+
   await nextTick()
   if (heatPoints.value.length) {
     fitMap()
@@ -223,6 +248,10 @@ watch(
   () => loadHeatmap(),
   { immediate: true }
 )
+
+onBeforeUnmount(() => {
+  detachZoomListener()
+})
 </script>
 
 <style scoped>

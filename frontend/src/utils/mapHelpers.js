@@ -255,6 +255,63 @@ export function fixLeafletMarkerAnimation() {
     }
 }
 
+/**
+ * Guard leaflet.heat zoom callbacks against transient null map/layer state
+ * during animated zooms and view resets.
+ */
+export function fixLeafletHeatLayerAnimation() {
+    const PATCH_VERSION = 1
+    if (L.__geoPulseHeatLayerGuardsPatchVersion === PATCH_VERSION) {
+        return
+    }
+
+    const HeatLayer = L.HeatLayer
+    if (!HeatLayer?.prototype) {
+        return
+    }
+
+    L.__geoPulseHeatLayerGuardsPatchVersion = PATCH_VERSION
+
+    if (HeatLayer.prototype._animateZoom) {
+        const originalAnimateZoom = HeatLayer.prototype._animateZoom
+        HeatLayer.prototype._animateZoom = function (e) {
+            if (!this ||
+                !this._map ||
+                !this._heat ||
+                typeof this._map.getZoomScale !== 'function' ||
+                !e ||
+                typeof e.zoom === 'undefined' ||
+                !e.center) {
+                return this
+            }
+
+            try {
+                return originalAnimateZoom.call(this, e)
+            } catch (err) {
+                return this
+            }
+        }
+    }
+
+    if (HeatLayer.prototype._reset) {
+        const originalReset = HeatLayer.prototype._reset
+        HeatLayer.prototype._reset = function () {
+            if (!this ||
+                !this._map ||
+                !this._heat ||
+                typeof this._map.containerPointToLayerPoint !== 'function') {
+                return this
+            }
+
+            try {
+                return originalReset.call(this)
+            } catch (err) {
+                return this
+            }
+        }
+    }
+}
+
 // Color scheme for different marker types
 export const MARKER_COLORS = {
     STAY: '#607D8B',           // Blue Grey - for stay points
