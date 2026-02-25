@@ -23,7 +23,7 @@ const props = defineProps({
   },
   fillColor: {
     type: String,
-    default: '#3b82f6'
+    default: '#1d4ed8'
   },
   minOpacity: {
     type: Number,

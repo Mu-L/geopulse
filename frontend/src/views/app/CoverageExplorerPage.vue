@@ -236,9 +236,9 @@ const canToggleCoverage = computed(() =>
 )
 
 const getGridForZoom = (zoom) => {
-  if (zoom <= 3) return 40000
-  if (zoom <= 5) return 20000
-  if (zoom <= 7) return 5000
+  if (zoom <= 4) return 40000
+  if (zoom <= 6) return 20000
+  if (zoom <= 8) return 5000
   if (zoom <= 10) return 1000
   if (zoom <= 12) return 250
   if (zoom <= 14) return 50
