@@ -18,14 +18,12 @@
           :placeholder="placeholder"
       >
         <template #footer>
-          <Select
-              :options="presetOptions"
-              optionLabel="label"
-              optionValue="value"
-              :placeholder="presetPlaceholder"
-              v-model="selectedPreset"
-              @change="setPresetRange"
-              v-bind="selectGroupProps"
+          <DateRangePresetSelect
+            v-model="selectedPreset"
+            :options="presetOptions"
+            :placeholder="presetPlaceholder"
+            :group-props="selectGroupProps"
+            @change="setPresetRange"
           />
         </template>
       </DatePicker>
@@ -50,14 +48,12 @@
         :placeholder="placeholder"
     >
       <template #footer>
-        <Select
-            :options="presetOptions"
-            optionLabel="label"
-            optionValue="value"
-            :placeholder="presetPlaceholder"
-            v-model="selectedPreset"
-            @change="setPresetRange"
-            v-bind="selectGroupProps"
+        <DateRangePresetSelect
+          v-model="selectedPreset"
+          :options="presetOptions"
+          :placeholder="presetPlaceholder"
+          :group-props="selectGroupProps"
+          @change="setPresetRange"
         />
       </template>
     </DatePicker>
@@ -76,9 +72,10 @@ import { storeToRefs } from 'pinia'
 import { useDateRangeStore } from '@/stores/dateRange'
 import { usePeriodTagsStore } from '@/stores/periodTags'
 import { useTimezone } from '@/composables/useTimezone'
+import { normalizePeriodTagColor } from '@/utils/periodTagHelpers'
 import DatePicker from 'primevue/datepicker'
 import FloatLabel from 'primevue/floatlabel'
-import Select from 'primevue/select'
+import DateRangePresetSelect from '@/components/ui/DateRangePresetSelect.vue'
 
 const props = defineProps({
   variant: {
@@ -174,17 +171,27 @@ const periodPresets = computed(() => {
 
   return sorted.map((tag) => ({
     label: formatPeriodPresetLabel(tag),
-    value: `${periodPresetPrefix}${tag.id}`
+    nameLabel: truncatePresetName(tag.tagName || 'Period'),
+    value: `${periodPresetPrefix}${tag.id}`,
+    kind: 'period-tag',
+    color: normalizePeriodTagColor(tag.color),
+    dateLabel: formatPeriodPresetDateLabel(tag)
+  }))
+})
+
+const defaultPresetOptions = computed(() => {
+  return (props.presets || []).map((preset) => ({
+    ...preset,
+    kind: 'default-preset'
   }))
 })
 
 const useGroupedPresets = computed(() => periodPresets.value.length > 0)
-
 const presetOptions = computed(() => {
-  if (!useGroupedPresets.value) return props.presets
+  if (!useGroupedPresets.value) return defaultPresetOptions.value
   return [
-    { label: 'Periods', items: periodPresets.value },
-    { label: 'Presets', items: props.presets }
+    { label: 'Period Tags', items: periodPresets.value },
+    { label: 'Presets', items: defaultPresetOptions.value }
   ]
 })
 
@@ -236,8 +243,8 @@ const dateRange = computed({
   }
 })
 
-function setPresetRange() {
-  const presetValue = selectedPreset.value
+function setPresetRange(event) {
+  const presetValue = event?.value ?? selectedPreset.value
   setPresetByValue(presetValue)
 }
 
@@ -288,23 +295,26 @@ function getPeriodDateRange(tag) {
 }
 
 function formatPeriodPresetLabel(tag) {
+  const tagName = truncatePresetName(tag.tagName || 'Period')
+  const dateRangeLabel = formatPeriodPresetDateLabel(tag)
+  return `${tagName} (${dateRangeLabel})`
+}
+
+function formatPeriodPresetDateLabel(tag) {
   const start = timezone.fromUtc(tag.startTime)
   const endBase = tag.endTime ? timezone.fromUtc(tag.endTime) : timezone.now()
   const isActive = !tag.endTime || tag.isActive
   const nowYear = timezone.now().year()
   const includeYear = start.year() !== endBase.year() || start.year() !== nowYear
   const format = includeYear ? 'MMM D, YYYY' : 'MMM D'
-
-  const tagName = truncatePresetName(tag.tagName || 'Period')
   const startText = start.format(format)
   const endText = isActive ? 'Today' : endBase.format(format)
 
   if (start.isSame(endBase, 'day')) {
-    const singleText = isActive ? 'Today' : startText
-    return `${tagName} (${singleText})`
+    return isActive ? 'Today' : startText
   }
 
-  return `${tagName} (${startText} - ${endText})`
+  return `${startText} - ${endText}`
 }
 
 function truncatePresetName(name) {
