@@ -50,7 +50,7 @@
               shape="circle"
             />
             <span class="gap-user-name">{{ item.userFullName }}</span>
-            <span class="gap-time">{{ timezone.format(item.timestamp) }}</span>
+            <span class="gap-time">{{ formatTimelineTimestamp(item) }}</span>
           </div>
           <div class="gap-content">
             <i class="pi pi-exclamation-triangle"></i>
@@ -114,6 +114,12 @@ function loadMore() {
 
 function handleItemClick(item) {
   emit('item-click', item)
+}
+
+function formatTimelineTimestamp(item) {
+  const timestamp = item?.timestamp || item?.startTime
+  if (!timestamp) return ''
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.formatTime(timestamp)}`
 }
 </script>
 

@@ -141,6 +141,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTimelineStore } from '@/stores/timeline'
+import { useTimezone } from '@/composables/useTimezone'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
 import PageContainer from '@/components/ui/layout/PageContainer.vue'
 import Card from 'primevue/card'
@@ -150,6 +151,7 @@ import Message from 'primevue/message'
 
 const router = useRouter()
 const timelineStore = useTimelineStore()
+const timezone = useTimezone()
 
 const loading = ref(true)
 const activeJob = ref(null)
@@ -203,14 +205,7 @@ const viewJobDetails = (jobId) => {
 
 const formatDate = (timestamp) => {
   if (!timestamp) return 'N/A'
-  const date = new Date(timestamp)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm')}`
 }
 
 const formatDuration = (durationMs) => {

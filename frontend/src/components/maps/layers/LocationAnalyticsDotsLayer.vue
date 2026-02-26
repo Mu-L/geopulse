@@ -14,6 +14,7 @@ import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import BaseLayer from './BaseLayer.vue'
+import { useTimezone } from '@/composables/useTimezone'
 
 const props = defineProps({
   map: {
@@ -43,6 +44,7 @@ const emit = defineEmits(['marker-click', 'open-place-details'])
 const baseLayerRef = ref(null)
 const markerClusterGroup = ref(null)
 const selectedMarker = ref(null)
+const timezone = useTimezone()
 const hoveredMarker = ref(null)
 const markersByKey = new Map()
 const openPopupPlaceKey = ref(null)
@@ -66,9 +68,11 @@ const escapeHtml = (value) => {
 
 const formatDate = (timestamp) => {
   if (!timestamp) return 'Unknown'
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
-  return date.toLocaleString()
+  try {
+    return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
+  } catch {
+    return 'Unknown'
+  }
 }
 
 const createDotIcon = ({ hovered = false } = {}) => {

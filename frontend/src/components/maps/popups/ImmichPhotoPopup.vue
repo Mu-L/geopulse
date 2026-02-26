@@ -108,16 +108,16 @@ const dateRange = computed(() => {
   
   if (dates.length === 0) return null
   
-  if (dates.length === 1) return timezone.format(dates[0], 'M/D/YYYY')
+  if (dates.length === 1) return timezone.formatDateDisplay(dates[0])
   
-  return `${timezone.format(dates[0], 'M/D/YYYY')} - ${timezone.format(dates[dates.length - 1], 'M/D/YYYY')}`
+  return `${timezone.formatDateDisplay(dates[0])} - ${timezone.formatDateDisplay(dates[dates.length - 1])}`
 })
 
 // Methods
 const formatDate = (dateString) => {
   if (!dateString) return ''
   try {
-    return timezone.format(dateString, 'YYYY-MM-DD HH:mm:ss')
+    return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
   } catch (error) {
     return dateString
   }

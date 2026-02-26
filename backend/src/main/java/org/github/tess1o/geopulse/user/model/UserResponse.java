@@ -25,5 +25,6 @@ public class UserResponse {
     private String customMapTileUrl;
     private MeasureUnit measureUnit;
     private String defaultRedirectUrl;
+    private String dateFormat;
     // Don't include passwordHash in responses
 }

@@ -686,7 +686,7 @@ const refreshImportJobs = async () => {
 }
 
 const formatDate = (dateString) => {
-  return timezone.format(dateString, 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
 }
 
 const downloadCsvTemplate = async () => {

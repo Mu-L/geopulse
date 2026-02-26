@@ -36,7 +36,7 @@
               iconDisplay="input"
               showIcon
               :showOnFocus="true"
-              dateFormat="mm/dd/yy"
+              :dateFormat="timezone.getPrimeVueDatePickerFormat()"
               placeholder="Filter date range"
               :minDate="shareStartDate"
               :maxDate="shareEndDate"
@@ -486,7 +486,7 @@ function storeToken(response) {
 
 function formatDate(dateStr) {
   if (!dateStr) return 'N/A'
-  return timezone.fromUtc(dateStr).format('MMM D, YYYY')
+  return timezone.formatDateDisplay(dateStr)
 }
 
 function formatExpiration() {

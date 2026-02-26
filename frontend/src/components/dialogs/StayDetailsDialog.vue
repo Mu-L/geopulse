@@ -130,7 +130,7 @@ const mapCenter = computed(() => {
 
 // Methods
 const formatDate = (timestamp) => {
-  return timezone.format(timestamp, 'YYYY-MM-DD')
+  return timezone.formatDateDisplay(timestamp)
 }
 
 const formatTime = (timestamp) => {
@@ -139,7 +139,7 @@ const formatTime = (timestamp) => {
 
 const getStartDateTime = () => {
   if (!props.stay?.timestamp) return 'N/A'
-  return timezone.format(props.stay.timestamp, 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(props.stay.timestamp)} ${timezone.format(props.stay.timestamp, 'HH:mm:ss')}`
 }
 
 const getEndDateTime = () => {
@@ -149,7 +149,7 @@ const getEndDateTime = () => {
   const startTime = timezone.fromUtc(props.stay.timestamp)
   const endTime = startTime.clone().add(props.stay.stayDuration, 'seconds')
   
-  return timezone.format(endTime.toISOString(), 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(endTime.toISOString())} ${timezone.format(endTime.toISOString(), 'HH:mm:ss')}`
 }
 
 const formatDuration = (seconds) => {

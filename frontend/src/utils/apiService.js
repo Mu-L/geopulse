@@ -15,6 +15,9 @@ const apiService = {
     // Promise that resolves when token refresh completes
     _refreshTokenPromise: null,
 
+    // Prevent duplicate redirects when multiple requests fail at once
+    _redirectingToErrorPage: false,
+
     hasCachedUser() {
         return !!readUserSnapshot().id;
     },
@@ -114,11 +117,21 @@ const apiService = {
                 return response.status === 200;
             } catch (refreshError) {
                 console.error('Cookie refresh failed:', refreshError);
-                this.clearAuthData();
-                return false;
+                const status = refreshError.response?.status;
+
+                // Invalid/expired refresh cookie -> treat as auth expiration
+                if (status === 401 || status === 403) {
+                    this.clearAuthData();
+                    return false;
+                }
+
+                // Backend outage / server failure should bubble up so the normal
+                // error handling path can redirect to the error page.
+                throw refreshError;
             } finally {
                 // Reset the refreshing flag when done
                 this._refreshingToken = false;
+                this._refreshTokenPromise = null;
             }
         })();
 
@@ -151,6 +164,8 @@ const apiService = {
                             }
                         } catch (refreshError) {
                             console.error('Token refresh failed:', refreshError);
+                            await this.handleError(refreshError);
+                            throw refreshError;
                         }
                     }
                 }
@@ -166,10 +181,13 @@ const apiService = {
         // Skip auth check for public endpoints
         const publicEndpoints = [
             '/auth/login',
+            '/auth/status',
             '/users/register',
             '/auth/refresh',
             '/auth/refresh-cookie',
-            '/auth/logout'
+            '/auth/logout',
+            '/auth/oidc/providers',
+            '/auth/oidc/callback'
         ];
 
         // Skip auth check for shared location endpoints (they use their own temporary tokens)
@@ -451,9 +469,11 @@ const apiService = {
      */
     redirectToErrorPage(error) {
         // Avoid infinite redirects if we're already on error page
-        if (window.location.pathname === '/error') {
+        if (window.location.pathname === '/error' || this._redirectingToErrorPage) {
             return;
         }
+
+        this._redirectingToErrorPage = true;
 
         // Use setTimeout to avoid issues with Vue router during navigation
         setTimeout(() => {
@@ -471,14 +491,30 @@ const apiService = {
                 stack: error.stack
             };
 
+            let detailsStoredInSession = false;
+            try {
+                sessionStorage.setItem('errorDetails', JSON.stringify(errorDetails));
+                detailsStoredInSession = true;
+
+                const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                if (returnTo && !returnTo.startsWith('/error')) {
+                    sessionStorage.setItem('errorReturnTo', returnTo);
+                }
+            } catch (storageError) {
+                console.warn('Unable to store error context in session storage:', storageError);
+            }
+
             const errorParams = new URLSearchParams({
                 type: 'connection',
                 title: 'Backend Unavailable',
-                message: 'GeoPulse servers are currently unavailable. Please try again later.',
-                details: JSON.stringify(errorDetails)
+                message: 'GeoPulse servers are currently unavailable. Please try again later.'
             });
 
-            window.location.href = `/error?${errorParams.toString()}`;
+            if (!detailsStoredInSession) {
+                errorParams.set('details', JSON.stringify(errorDetails));
+            }
+
+            window.location.replace(`/error?${errorParams.toString()}`);
         }, 100);
     },
 

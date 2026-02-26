@@ -22,6 +22,7 @@ export function writeUserSnapshot(user) {
         customMapTileUrl: user.customMapTileUrl,
         measureUnit: user.measureUnit,
         defaultRedirectUrl: user.defaultRedirectUrl,
+        dateFormat: user.dateFormat,
         role: user.role
     }))
 }

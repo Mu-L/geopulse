@@ -235,6 +235,7 @@ import { storeToRefs } from 'pinia'
 import { useToast } from 'primevue/usetoast'
 import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
+import { useTimezone } from '@/composables/useTimezone'
 
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
 import PageContainer from '@/components/ui/layout/PageContainer.vue'
@@ -255,6 +256,7 @@ const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const store = useLocationAnalyticsStore()
+const timezone = useTimezone()
 
 const {
   mapPlaces,
@@ -320,13 +322,7 @@ const mapPlaceTripTagsByKey = computed(() => {
 
 const formatLastVisitFull = (timestamp) => {
   if (!timestamp) return 'Unknown'
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
+  return timezone.formatDateDisplay(timestamp)
 }
 
 const getMapPlaceTripTag = (place) => {

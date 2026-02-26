@@ -493,7 +493,7 @@ const timeUntil = (futureDate) => {
   if (diffDays < 30) return `In ${diffDays} days`
 
   // For longer periods, show actual date
-  return `On ${timezone.format(dateObj, 'YYYY-MM-DD HH:mm')}`
+  return `On ${timezone.formatDateDisplay(dateObj.toISOString())} ${dateObj.format('HH:mm')}`
 }
 
 // Format expiration using timeUntil

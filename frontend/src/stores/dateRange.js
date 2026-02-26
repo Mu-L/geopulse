@@ -30,7 +30,7 @@ export const useDateRangeStore = defineStore('dateRange', {
             const [start, end] = state.dateRange
             if (!start || !end) return ''
 
-            return `${timezone.formatDateUS(start)} - ${timezone.formatDateUS(end)}`
+            return `${timezone.formatDateDisplay(start)} - ${timezone.formatDateDisplay(end)}`
         },
 
         // Duration getter

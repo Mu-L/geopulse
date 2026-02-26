@@ -182,7 +182,7 @@ const formattedLastMonthRange = computed(() => {
 const formatRange = (range) => {
   const [start, end] = range || []
   return start && end
-      ? `${timezone.format(start, 'MM/DD')} - ${timezone.format(end, 'MM/DD')}`
+      ? `${timezone.formatDateDisplay(start)} - ${timezone.formatDateDisplay(end)}`
       : ''
 }
 

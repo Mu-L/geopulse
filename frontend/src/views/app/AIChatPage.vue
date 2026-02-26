@@ -221,9 +221,11 @@ import { ref, nextTick, onMounted, computed } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
 import PageContainer from '@/components/ui/layout/PageContainer.vue'
+import { useTimezone } from '@/composables/useTimezone'
 import apiService from '@/utils/apiService.js'
 
 const toast = useToast()
+const timezone = useTimezone()
 
 // Constants
 const MESSAGE_RETENTION_DAYS = 7
@@ -280,7 +282,7 @@ const formatTimestamp = (date) => {
     return `Yesterday ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
   }
   
-  return messageDate.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return `${timezone.formatDateDisplay(date)} ${messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 const saveMessagesToStorage = (messagesToSave) => {

@@ -639,13 +639,13 @@ const isJobExpired = (job) => {
 }
 
 const formatDate = (dateString) => {
-  return timezone.format(dateString, 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
 }
 
 const formatDateRange = (dateRange) => {
   if (!dateRange) return 'All time'
-  const start = timezone.fromUtc(dateRange.startDate).format('YYYY-MM-DD')
-  const end = timezone.fromUtc(dateRange.endDate).format('YYYY-MM-DD')
+  const start = timezone.formatDateDisplay(dateRange.startDate)
+  const end = timezone.formatDateDisplay(dateRange.endDate)
   return `${start} - ${end}`
 }
 

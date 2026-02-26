@@ -257,11 +257,13 @@ import Breadcrumb from 'primevue/breadcrumb'
 import { useToast } from 'primevue/usetoast'
 import { useAuthStore } from '@/stores/auth'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
+import { useTimezone } from '@/composables/useTimezone'
 import apiService from '@/utils/apiService'
 
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
+const timezone = useTimezone()
 
 const breadcrumbHome = ref({
   icon: 'pi pi-home',
@@ -419,7 +421,7 @@ const formatNumber = (num) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleDateString()
+  return timezone.formatDateDisplay(dateStr)
 }
 
 // Mobile pagination methods

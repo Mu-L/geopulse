@@ -168,8 +168,8 @@ watch(dates, (newValue) => {
   if (newValue && timezone.isValidDateRange(newValue)) {
     const [newStartDate, newEndDate] = newValue;
 
-    const newStart = timezone.formatDateUS(newStartDate);
-    const newEnd = timezone.formatDateUS(newEndDate);
+    const newStart = timezone.formatUrlDate(newStartDate);
+    const newEnd = timezone.formatUrlDate(newEndDate);
 
     if (route.query.start !== newStart || route.query.end !== newEnd) {
       isUpdatingUrl.value = true

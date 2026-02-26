@@ -79,6 +79,25 @@
           </div>
 
           <div class="form-field">
+            <label for="dateFormat" class="form-label">
+              Date Format
+              <i class="pi pi-info-circle" v-tooltip.right="'Choose how dates are shown across the app (for example in the timeline date range picker).'"></i>
+            </label>
+            <Dropdown
+              id="dateFormat"
+              v-model="form.dateFormat"
+              :options="dateFormatOptions"
+              optionLabel="label"
+              optionValue="value"
+              placeholder="Select your preferred date format"
+              class="w-full"
+            />
+            <small class="help-text">
+              Controls numeric date display order in the UI. URL date parameters use a stable ISO format.
+            </small>
+          </div>
+
+          <div class="form-field">
             <label for="measureUnit" class="form-label">
               Measurement Unit
               <i class="pi pi-info-circle" v-tooltip.right="'Choose your preferred unit for distance and speed.'"></i>
@@ -190,6 +209,10 @@ const props = defineProps({
   userDefaultRedirectUrl: {
     type: String,
     default: ''
+  },
+  userDateFormat: {
+    type: String,
+    default: 'MDY'
   }
 })
 
@@ -202,6 +225,7 @@ const localAvatar = ref('')
 const form = ref({
   fullName: '',
   timezone: '',
+  dateFormat: 'MDY',
   measureUnit: 'METRIC', // Default value
   defaultRedirectUrl: '',
   customRedirectUrl: ''
@@ -305,6 +329,12 @@ const measureUnitOptions = [
   { label: 'Imperial (miles, feet)', value: 'IMPERIAL' }
 ]
 
+const dateFormatOptions = [
+  { label: 'DD/MM/YYYY (European)', value: 'DMY' },
+  { label: 'MM/DD/YYYY (US)', value: 'MDY' },
+  { label: 'YYYY-MM-DD (ISO)', value: 'YMD' }
+]
+
 const defaultRedirectUrlOptions = [
   { label: 'Timeline', value: '/app/timeline' },
   { label: 'Dashboard', value: '/app/dashboard' },
@@ -326,6 +356,7 @@ const hasChanges = computed(() => {
   return form.value.fullName !== props.userName ||
          localAvatar.value !== props.userAvatar ||
          form.value.timezone !== props.userTimezone ||
+         form.value.dateFormat !== props.userDateFormat ||
          form.value.measureUnit !== props.userMeasureUnit ||
          effectiveRedirectUrl !== props.userDefaultRedirectUrl
 })
@@ -375,6 +406,7 @@ const handleSubmit = async () => {
       fullName: form.value.fullName.trim(),
       avatar: localAvatar.value,
       timezone: form.value.timezone,
+      dateFormat: form.value.dateFormat,
       measureUnit: form.value.measureUnit,
       defaultRedirectUrl: effectiveRedirectUrl
     })
@@ -386,6 +418,7 @@ const handleSubmit = async () => {
 const handleReset = () => {
   form.value.fullName = props.userName || ''
   form.value.timezone = props.userTimezone || 'UTC'
+  form.value.dateFormat = props.userDateFormat || 'MDY'
   form.value.measureUnit = props.userMeasureUnit || 'METRIC'
 
   // Check if the stored URL matches any predefined option
@@ -422,7 +455,7 @@ onMounted(() => {
 })
 
 // Watch props changes
-watch(() => [props.userName, props.userAvatar, props.userTimezone, props.userMeasureUnit, props.userDefaultRedirectUrl], () => {
+watch(() => [props.userName, props.userAvatar, props.userTimezone, props.userDateFormat, props.userMeasureUnit, props.userDefaultRedirectUrl], () => {
   handleReset()
 })
 </script>

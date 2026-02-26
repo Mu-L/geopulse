@@ -37,10 +37,12 @@ import { storeToRefs } from 'pinia'
 import AutoComplete from 'primevue/autocomplete'
 import { useLocationAnalyticsStore } from '@/stores/locationAnalytics'
 import { usePeriodTagsStore } from '@/stores/periodTags'
+import { useTimezone } from '@/composables/useTimezone'
 
 const router = useRouter()
 const store = useLocationAnalyticsStore()
 const tagsStore = usePeriodTagsStore()
+const timezone = useTimezone()
 
 const { searchResults, searchLoading } = storeToRefs(store)
 
@@ -84,11 +86,7 @@ const handleSearch = async (event) => {
 }
 
 const formatDateForUrl = (dateString) => {
-  const date = new Date(dateString)
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${month}/${day}/${year}`
+  return timezone.formatUrlDate(dateString)
 }
 
 const handleSelect = (event) => {
@@ -159,8 +157,7 @@ const formatDisplayName = (result) => {
 
 const formatTagDate = (tag) => {
   const formatDate = (dateString) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    return timezone.formatDateDisplay(dateString)
   }
 
   if (tag.endTime) {

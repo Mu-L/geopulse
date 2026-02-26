@@ -100,6 +100,10 @@ public class UserEntity extends PanacheEntityBase {
     @Column(name = "default_redirect_url", length = 1000)
     private String defaultRedirectUrl;
 
+    @Size(max = 16, message = "Date format cannot exceed 16 characters")
+    @Column(name = "date_format", length = 16)
+    private String dateFormat;
+
     @Column(name = "coverage_enabled", nullable = false)
     @Builder.Default
     private boolean coverageEnabled = false;

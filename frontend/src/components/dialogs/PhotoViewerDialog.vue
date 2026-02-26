@@ -283,7 +283,7 @@ const formatDate = (dateString) => {
   if (!dateString) return ''
   
   try {
-    return timezone.format(dateString, 'YYYY-MM-DD HH:mm:ss')
+    return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
   } catch (error) {
     return dateString
   }

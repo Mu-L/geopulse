@@ -138,7 +138,7 @@
             show-time
             hour-format="24"
             :number-of-months="1"
-            date-format="mm/dd/yy"
+            :date-format="timezone.getPrimeVueDatePickerFormat()"
             placeholder="Select range"
             class="date-picker date-picker-wide"
             @date-select="handleDateChange"
@@ -696,22 +696,22 @@ const formatNumber = (value) => {
 }
 
 const formatDate = (value) => {
-  if (!value) return '-';
-  return timezone.format(value, 'YYYY-MM-DD');
+  if (!value) return '-'
+  return timezone.formatDateDisplay(value)
 }
 
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return { date: '-', time: '-' }
   return {
-    date: timezone.format(timestamp, 'YYYY-MM-DD'),
+    date: timezone.formatDateDisplay(timestamp),
     time: timezone.format(timestamp, 'HH:mm')
   }
 }
 
 const formatDateRange = (range) => {
   if (!range || range.length < 2) return ''
-  const start = timezone.format(range[0], 'MMM D');
-  const end = timezone.format(range[1], 'MMM D');
+  const start = timezone.formatDateDisplay(range[0])
+  const end = timezone.formatDateDisplay(range[1])
   return `${start} - ${end}`
 }
 

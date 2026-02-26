@@ -327,7 +327,8 @@ const filteredTripsData = useTripsFilter(
 
 // Methods - Using memoized formatters for better performance
 const formatDate = (timestamp) => {
-  return memoizedDateTimeFormat(timestamp, 'YYYY-MM-DD', (ts, fmt) => timezone.format(ts, fmt))
+  const cacheKeyFormat = `DATE_DISPLAY:${timezone.getDateFormat()}`
+  return memoizedDateTimeFormat(timestamp, cacheKeyFormat, (ts) => timezone.formatDateDisplay(ts))
 }
 
 const formatTime = (timestamp) => {
@@ -340,11 +341,11 @@ const getEndDate = (trip) => {
   return memoizedEndTimeFormat(
     trip.timestamp,
     trip.tripDuration,
-    'YYYY-MM-DD',
-    (startTime, duration, format) => {
+    `DATE_DISPLAY:${timezone.getDateFormat()}`,
+    (startTime, duration) => {
       const start = timezone.fromUtc(startTime)
       const end = start.clone().add(duration, 'seconds')
-      return timezone.format(end.toISOString(), format)
+      return timezone.formatDateDisplay(end.toISOString())
     }
   )
 }

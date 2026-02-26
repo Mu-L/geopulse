@@ -166,8 +166,8 @@ const formatOnThisDayDuration = (stayItem) => {
 
 const formattedTimestamp = computed(() => {
   if (!props.stayItem.timestamp) return '';
-  return timezone.format(props.stayItem.timestamp);
-});
+  return `${timezone.formatDateDisplay(props.stayItem.timestamp)} ${timezone.formatTime(props.stayItem.timestamp)}`
+})
 </script>
 
 <style scoped>

@@ -2,8 +2,22 @@ import {defineStore} from 'pinia'
 import apiService from '../utils/apiService'
 import {useTimezone} from '@/composables/useTimezone'
 import {clearUserSnapshot, readUserSnapshot, writeUserSnapshot} from '@/utils/authSnapshotStorage'
+import {isBackendDown} from '@/utils/errorHandler'
 
 let authReconcilePromise = null
+
+function shouldPreserveAuthSnapshot(error) {
+    if (!error) {
+        return false
+    }
+
+    if (isBackendDown(error)) {
+        return true
+    }
+
+    const status = error.response?.status
+    return typeof status === 'number' && status >= 500
+}
 
 function normalizeUser(source) {
     if (!source) {
@@ -28,6 +42,7 @@ function normalizeUser(source) {
         customMapTileUrl: raw.customMapTileUrl || '',
         measureUnit: raw.measureUnit || 'METRIC',
         defaultRedirectUrl: raw.defaultRedirectUrl || '',
+        dateFormat: raw.dateFormat || 'MDY',
         role: raw.role || 'USER'
     }
 }
@@ -51,6 +66,7 @@ export const useAuthStore = defineStore('auth', {
         customMapTileUrl: (state) => state.user?.customMapTileUrl || '',
         measureUnit: (state) => state.user?.measureUnit || 'METRIC',
         defaultRedirectUrl: (state) => state.user?.defaultRedirectUrl || '',
+        dateFormat: (state) => state.user?.dateFormat || 'MDY',
         userRole: (state) => state.user?.role || 'USER',
         isAdmin: (state) => state.user?.role === 'ADMIN',
     },
@@ -67,8 +83,10 @@ export const useAuthStore = defineStore('auth', {
                     writeUserSnapshot(user)
                 }
                 timezone.setTimezone(user.timezone || 'UTC')
+                timezone.setDateFormat(user.dateFormat || 'MDY')
             } else if (persist) {
                 clearUserSnapshot()
+                timezone.setDateFormat('MDY')
             }
 
             return user
@@ -102,6 +120,9 @@ export const useAuthStore = defineStore('auth', {
             this.user = null
             this.isAuthenticated = false
             clearUserSnapshot()
+            const timezone = useTimezone()
+            timezone.setTimezone('UTC')
+            timezone.setDateFormat('MDY')
             apiService.clearAuthData()
         },
 
@@ -110,7 +131,9 @@ export const useAuthStore = defineStore('auth', {
                 const response = await apiService.login(email, password)
                 return this.consumeBrowserAuthResponse(response?.data)
             } catch (error) {
-                this.clearUser()
+                if (!shouldPreserveAuthSnapshot(error)) {
+                    this.clearUser()
+                }
                 throw error
             }
         },
@@ -130,13 +153,14 @@ export const useAuthStore = defineStore('auth', {
             this.clearUser()
         },
 
-        async updateProfile({fullName, avatar, timezone, measureUnit, defaultRedirectUrl}) {
+        async updateProfile({fullName, avatar, timezone, measureUnit, defaultRedirectUrl, dateFormat}) {
             const response = await apiService.post('/users/update', {
                 fullName,
                 avatar,
                 timezone,
                 measureUnit,
-                defaultRedirectUrl
+                defaultRedirectUrl,
+                dateFormat
             })
 
             const updatedUser = response?.data
@@ -196,7 +220,12 @@ export const useAuthStore = defineStore('auth', {
 
                     return await this.fetchCurrentUserProfile()
                 } catch (error) {
-                    this.clearUser()
+                    if (error && !error.userMessage && !error.userTitle) {
+                        apiService.handleError(error)
+                    }
+                    if (!shouldPreserveAuthSnapshot(error)) {
+                        this.clearUser()
+                    }
                     return null
                 } finally {
                     authReconcilePromise = null
@@ -228,6 +257,12 @@ export const useAuthStore = defineStore('auth', {
 
                 return await this._reconcileAuthState()
             } catch (error) {
+                if (error && !error.userMessage && !error.userTitle) {
+                    apiService.handleError(error)
+                }
+                if (shouldPreserveAuthSnapshot(error)) {
+                    return this.user
+                }
                 this.clearUser()
                 return null
             }
@@ -258,7 +293,9 @@ export const useAuthStore = defineStore('auth', {
                 const response = await apiService.post('/auth/oidc/callback', {code, state})
                 return this.consumeBrowserAuthResponse(response?.data)
             } catch (error) {
-                this.clearUser()
+                if (!shouldPreserveAuthSnapshot(error)) {
+                    this.clearUser()
+                }
                 throw error
             }
         },

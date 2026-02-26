@@ -174,7 +174,10 @@ const renderTimelineMarkers = () => {
 }
 
 const createPopupContent = (item) => {
-  const dateStr = timezone.format(item.timestamp, 'YYYY-MM-DD HH:mm:ss')
+  const timestamp = item.timestamp || item.startTime
+  const dateStr = timestamp
+    ? `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
+    : 'Unknown time'
 
   // Handle different item types
   if (item.type === 'stay') {

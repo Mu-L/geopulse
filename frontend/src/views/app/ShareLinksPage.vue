@@ -392,7 +392,7 @@
                   :minDate="minDate"
                   showTime
                   hourFormat="24"
-                  dateFormat="mm/dd/yy"
+                  :dateFormat="timezone.getPrimeVueDatePickerFormat()"
                   class="form-input"
               />
             </div>
@@ -753,7 +753,8 @@ const copyToClipboard = async (text) => {
 }
 
 const formatDate = (dateString) => {
-  return timezone.format(dateString, 'MMM D, YYYY h:mm A')
+  if (!dateString) return ''
+  return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'h:mm A')}`
 }
 
 const formatShowHistory = (link) => {

@@ -156,7 +156,8 @@ const filteredDataGapsData = useDataGapsFilter(computed(() => props.dataGaps))
 
 // Methods - Using memoized formatters for better performance
 const formatDate = (timestamp) => {
-  return memoizedDateTimeFormat(timestamp, 'YYYY-MM-DD', (ts, fmt) => timezone.format(ts, fmt))
+  const cacheKeyFormat = `DATE_DISPLAY:${timezone.getDateFormat()}`
+  return memoizedDateTimeFormat(timestamp, cacheKeyFormat, (ts) => timezone.formatDateDisplay(ts))
 }
 
 const formatTime = (timestamp) => {

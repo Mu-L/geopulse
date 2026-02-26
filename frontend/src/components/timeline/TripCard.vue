@@ -102,8 +102,8 @@ const showContextMenu = (event) => {
 
 const formattedTimestamp = computed(() => {
   if (!props.tripItem.timestamp) return '';
-  return timezone.format(props.tripItem.timestamp);
-});
+  return `${timezone.formatDateDisplay(props.tripItem.timestamp)} ${timezone.formatTime(props.tripItem.timestamp)}`
+})
 </script>
 
 <style scoped>

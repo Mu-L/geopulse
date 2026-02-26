@@ -32,6 +32,7 @@ public class UserMapper {
                 .customMapTileUrl(entity.getCustomMapTileUrl())
                 .measureUnit(entity.getMeasureUnit())
                 .defaultRedirectUrl(entity.getDefaultRedirectUrl())
+                .dateFormat(entity.getDateFormat())
                 .build();
     }
 }
