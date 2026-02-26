@@ -240,17 +240,52 @@ export class DataExportImportPage {
   }
 
   async setDateRange(startDate, endDate) {
+    const formattedStartDate = await this.formatDateInputForCurrentUser(startDate);
+    const formattedEndDate = await this.formatDateInputForCurrentUser(endDate);
+
     // Clear and fill start date
     await this.page.locator(this.selectors.export.startDate).click();
     await this.page.locator(this.selectors.export.startDate).fill('');
-    await this.page.locator(this.selectors.export.startDate).type(startDate);
+    await this.page.locator(this.selectors.export.startDate).fill(formattedStartDate);
+    await this.page.locator(this.selectors.export.startDate).press('Tab');
 
     // Clear and fill end date
     await this.page.locator(this.selectors.export.endDate).click();
     await this.page.locator(this.selectors.export.endDate).fill('');
-    await this.page.locator(this.selectors.export.endDate).type(endDate);
+    await this.page.locator(this.selectors.export.endDate).fill(formattedEndDate);
+    await this.page.locator(this.selectors.export.endDate).press('Tab');
 
     await this.page.waitForTimeout(300);
+  }
+
+  async formatDateInputForCurrentUser(value) {
+    if (value instanceof Date) {
+      const yyyy = value.getFullYear();
+      const mm = String(value.getMonth() + 1).padStart(2, '0');
+      const dd = String(value.getDate()).padStart(2, '0');
+      value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    if (typeof value !== 'string') {
+      return String(value ?? '');
+    }
+
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!isoMatch) return value;
+
+    const [, yyyy, mm, dd] = isoMatch;
+    const dateFormat = await this.page.evaluate(() => {
+      try {
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        return userInfo.dateFormat || 'MDY';
+      } catch {
+        return 'MDY';
+      }
+    });
+
+    if (dateFormat === 'DMY') return `${dd}/${mm}/${yyyy}`;
+    if (dateFormat === 'YMD') return `${yyyy}-${mm}-${dd}`;
+    return `${mm}/${dd}/${yyyy}`;
   }
 
   async clickDateRangePreset(preset) {
@@ -460,14 +495,19 @@ export class DataExportImportPage {
       await this.page.waitForTimeout(300);
     }
 
-    // Fill dates
+    const formattedStartDate = await this.formatDateInputForCurrentUser(startDate);
+    const formattedEndDate = await this.formatDateInputForCurrentUser(endDate);
+
+    // Fill dates using the user's selected UI format and commit parsing with Tab.
     await this.page.locator(this.selectors.import.importStartDate).click();
     await this.page.locator(this.selectors.import.importStartDate).fill('');
-    await this.page.locator(this.selectors.import.importStartDate).type(startDate);
+    await this.page.locator(this.selectors.import.importStartDate).fill(formattedStartDate);
+    await this.page.locator(this.selectors.import.importStartDate).press('Tab');
 
     await this.page.locator(this.selectors.import.importEndDate).click();
     await this.page.locator(this.selectors.import.importEndDate).fill('');
-    await this.page.locator(this.selectors.import.importEndDate).type(endDate);
+    await this.page.locator(this.selectors.import.importEndDate).fill(formattedEndDate);
+    await this.page.locator(this.selectors.import.importEndDate).press('Tab');
 
     await this.page.waitForTimeout(300);
   }

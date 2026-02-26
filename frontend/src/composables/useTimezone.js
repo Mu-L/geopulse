@@ -242,7 +242,7 @@ export function useTimezone() {
         if (nowObj.diff(dateObj, 'hour') < 24) return `${nowObj.diff(dateObj, 'hour')} hours ago`
         if (nowObj.diff(dateObj, 'day') < 30) return `${nowObj.diff(dateObj, 'day')} days ago`
 
-        return dateObj.format('YYYY-MM-DD')
+        return formatDateDisplay(date)
     }
 
     // --- Timeline-Specific Helpers ---

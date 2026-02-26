@@ -208,7 +208,7 @@
                 <Calendar
                     id="startDate"
                     v-model="exportStartDate"
-                    dateFormat="yy-mm-dd"
+                    :dateFormat="timezone.getPrimeVueDatePickerFormat()"
                     placeholder="Select start date"
                     showIcon
                     class="date-picker"
@@ -219,7 +219,7 @@
                 <Calendar
                     id="endDate"
                     v-model="exportEndDate"
-                    dateFormat="yy-mm-dd"
+                    :dateFormat="timezone.getPrimeVueDatePickerFormat()"
                     placeholder="Select end date"
                     showIcon
                     class="date-picker"

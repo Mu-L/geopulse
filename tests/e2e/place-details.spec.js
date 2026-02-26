@@ -1,6 +1,8 @@
 import {test, expect} from '../fixtures/database-fixture.js';
 import {TestSetupHelper} from '../utils/test-setup-helper.js';
 import {PlaceDetailsPage} from '../pages/PlaceDetailsPage.js';
+import {TestData} from '../fixtures/test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Place Details Page', () => {
 
@@ -93,6 +95,36 @@ test.describe('Place Details Page', () => {
 
       const errorMessage = await placeDetailsPage.getErrorMessage();
       expect(errorMessage.length).toBeGreaterThan(0);
+    });
+
+    test('should display visit dates using user date format in visits table', async ({page, dbManager}) => {
+      const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+      const {user} = await TestSetupHelper.createAndLoginUser(page, dbManager, testUser);
+
+      const favoriteId = await TestSetupHelper.createFavoritePoint(dbManager, user.id, {
+        name: 'Date Format Place',
+        city: 'Paris',
+        country: 'France',
+        latitude: 48.8566,
+        longitude: 2.3522
+      });
+
+      await dbManager.client.query(`
+        INSERT INTO timeline_stays (user_id, favorite_id, timestamp, stay_duration, location, location_name, location_source, created_at, last_updated)
+        VALUES ($1, $2, $3, 5400, ST_SetSRID(ST_MakePoint($4, $5), 4326), $6, 'FAVORITE', NOW(), NOW())
+      `, [user.id, favoriteId, new Date('2025-09-21T10:15:00Z'), 2.3522, 48.8566, 'Date Format Place']);
+
+      const placeDetailsPage = new PlaceDetailsPage(page);
+      await placeDetailsPage.navigateToFavorite(favoriteId);
+      await placeDetailsPage.waitForPageLoad();
+
+      const firstRow = await placeDetailsPage.getVisitRowData(0);
+      const rowText = firstRow.join(' ');
+      DateFormatTestHelper.expectContainsDate(
+        rowText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
     });
   });
 

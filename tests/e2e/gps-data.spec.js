@@ -6,6 +6,7 @@ import {TestData} from '../fixtures/test-data.js';
 import {UserFactory} from '../utils/user-factory.js';
 import {GpsDataFactory} from '../utils/gps-data-factory.js';
 import {AppNavigation} from "../pages/AppNavigation.js";
+import {DateFormatTestHelper, DateFormatValues} from '../utils/date-format-test-helper.js';
 
 test.describe('GPS Data Page', () => {
 
@@ -188,6 +189,44 @@ test.describe('GPS Data Page', () => {
             expect(dbFirstDate.getMonth()).toBe(7); // August (0-indexed)
             expect(dbLastDate.getFullYear()).toBe(2025);
             expect(dbLastDate.getMonth()).toBe(7); // August (0-indexed)
+        });
+
+        test('should apply user date format to summary cards and timestamp column', async ({page, dbManager}) => {
+            const loginPage = new LoginPage(page);
+            const gpsDataPage = new GpsDataPage(page);
+            const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY, timezone: 'UTC' };
+
+            await UserFactory.createUser(page, testUser);
+            const user = await dbManager.getUserByEmail(testUser.email);
+            await dbManager.client.query(
+                'UPDATE users SET date_format = $1 WHERE id = $2',
+                [DateFormatValues.DMY, user.id]
+            );
+
+            const gpsTestData = GpsDataFactory.generateTestData(user.id, 'test-device');
+            await GpsDataFactory.insertGpsData(dbManager, gpsTestData.allPoints);
+
+            await loginPage.navigate();
+            await loginPage.login(testUser.email, testUser.password);
+            await TestHelpers.waitForNavigation(page, '**/app/timeline');
+
+            await gpsDataPage.navigate();
+            await gpsDataPage.waitForPageLoad();
+
+            const stats = await gpsDataPage.getSummaryStats();
+            DateFormatTestHelper.expectContainsDate(stats.firstPointDate, '10/08/2025', '08/10/2025');
+            DateFormatTestHelper.expectContainsDate(stats.lastPointDate, '15/08/2025', '08/15/2025');
+
+            const displayedPoints = await gpsDataPage.getDisplayedGpsPoints();
+            expect(displayedPoints.length).toBeGreaterThan(0);
+            const timestampTexts = displayedPoints.map(point => point.timestamp);
+            const matchingTimestamp = timestampTexts.find(text =>
+                text.includes('10/08/2025') || text.includes('12/08/2025') || text.includes('15/08/2025')
+            );
+            expect(matchingTimestamp).toBeTruthy();
+            expect(matchingTimestamp).not.toContain('08/10/2025');
+            expect(matchingTimestamp).not.toContain('08/12/2025');
+            expect(matchingTimestamp).not.toContain('08/15/2025');
         });
 
         test('should display correct points today count', async ({page, dbManager}) => {

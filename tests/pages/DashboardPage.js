@@ -323,7 +323,7 @@ export class DashboardPage {
    */
   async getCardPeriod(cardSelector) {
     const card = this.page.locator(cardSelector);
-    const periodElement = card.locator('.gp-card-period, .base-card-period');
+    const periodElement = card.locator('.gp-period-badge, .gp-card-period, .base-card-period');
     if (await periodElement.isVisible()) {
       return (await periodElement.textContent()).trim();
     }

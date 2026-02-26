@@ -1,6 +1,7 @@
 import {test, expect} from '../fixtures/database-fixture.js';
 import {TestSetupHelper} from '../utils/test-setup-helper.js';
 import {TestData} from '../fixtures/test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Period Tags Management Page', () => {
 
@@ -56,6 +57,28 @@ test.describe('Period Tags Management Page', () => {
       // Verify active tag name is displayed
       const activeTagName = await periodTagsPage.getActiveTagName();
       expect(activeTagName).toContain('My Active Trip');
+    });
+
+    test('should display period tag dates using user date format', async ({page, dbManager}) => {
+      const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+      const {periodTagsPage, user} = await TestSetupHelper.loginAndNavigateToPeriodTagsPage(page, dbManager, testUser);
+
+      await TestSetupHelper.createPeriodTag(dbManager, user.id, {
+        tagName: 'September Trip',
+        startTime: new Date('2025-09-21T00:00:00Z'),
+        endTime: new Date('2025-09-24T00:00:00Z'),
+        source: 'manual'
+      });
+
+      await page.reload();
+      await periodTagsPage.waitForPageLoad();
+
+      const rowText = await page.locator(periodTagsPage.selectors.tableRow).first().textContent();
+      DateFormatTestHelper.expectContainsDate(
+        rowText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
     });
   });
 
@@ -536,8 +559,8 @@ test.describe('Period Tags Management Page', () => {
       await page.waitForURL('**/app/timeline**', { timeout: 5000 });
       const url = page.url();
 
-      expect(url).toContain('start=06/01/2024');
-      expect(url).toContain('end=06/07/2024');
+      expect(url).toContain('start=2024-06-01');
+      expect(url).toContain('end=2024-06-07');
     });
 
     test('should navigate to timeline for active tag with current date as end', async ({page, dbManager}) => {
@@ -562,7 +585,7 @@ test.describe('Period Tags Management Page', () => {
       await page.waitForURL('**/app/timeline**', { timeout: 5000 });
       const url = page.url();
 
-      expect(url).toContain('start=06/01/2024');
+      expect(url).toContain('start=2024-06-01');
       // End date should be current date (not checking exact value)
       expect(url).toContain('end=');
     });

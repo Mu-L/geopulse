@@ -6,6 +6,7 @@ import {TestData} from '../fixtures/test-data.js';
 import {UserFactory} from '../utils/user-factory.js';
 import {ValidationHelpers} from '../utils/validation-helpers.js';
 import {TestSetupHelper} from "../utils/test-setup-helper.js";
+import {DateFormatValues} from '../utils/date-format-test-helper.js';
 
 test.describe('User Profile Management', () => {
   
@@ -270,6 +271,31 @@ test.describe('User Profile Management', () => {
       
       // Close dropdown
       await page.keyboard.press('Escape');
+    });
+  });
+
+  test.describe('Date Format Management', () => {
+    test('should update date format and persist to database and localStorage', async ({page, dbManager}) => {
+      const {profilePage, testUser} = await TestSetupHelper.loginAndNavigateToUserProfilePage(page, dbManager);
+
+      await profilePage.selectDateFormat('DD/MM/YYYY (European)');
+      expect(await profilePage.getSelectedDateFormat()).toBe('DD/MM/YYYY (European)');
+
+      await profilePage.saveProfile();
+      await profilePage.waitForSuccessToast();
+
+      const toastMessage = await profilePage.getToastMessage();
+      expect(toastMessage).toContain('updated successfully');
+
+      expect(await profilePage.getDateFormatFromLocalStorage()).toBe(DateFormatValues.DMY);
+
+      const dbUser = await dbManager.getUserByEmail(testUser.email);
+      expect(dbUser.date_format).toBe(DateFormatValues.DMY);
+
+      await page.reload();
+      await profilePage.waitForPageLoad();
+      expect(await profilePage.getSelectedDateFormat()).toBe('DD/MM/YYYY (European)');
+      expect(await profilePage.getDateFormatFromLocalStorage()).toBe(DateFormatValues.DMY);
     });
   });
 

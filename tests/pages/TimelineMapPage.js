@@ -216,7 +216,7 @@ export class TimelineMapPage {
    * Get all timeline markers on the map
    */
   getTimelineMarkers() {
-    return this.page.locator('.timeline-marker');
+    return this.page.locator('.leaflet-marker-pane .timeline-marker');
   }
 
   /**
@@ -231,6 +231,7 @@ export class TimelineMapPage {
    */
   async clickTimelineMarker(index = 0) {
     const marker = this.getTimelineMarker(index);
+    await marker.waitFor({ state: 'visible', timeout: 10000 });
     await marker.click();
   }
 
@@ -529,7 +530,8 @@ export class TimelineMapPage {
    */
   async countMarkers(markerType) {
     const markerSelectors = {
-      timeline: '.timeline-marker',
+      // Timeline list markers use the same class name, so scope to Leaflet map markers.
+      timeline: '.leaflet-marker-pane .timeline-marker',
       favorite: '.leaflet-marker-pane .fas.fa-star',
       'current-location': '.leaflet-marker-icon[data-marker-type="current-location"]'
     };

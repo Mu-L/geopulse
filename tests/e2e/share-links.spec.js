@@ -4,6 +4,8 @@ import {TestSetupHelper} from '../utils/test-setup-helper.js';
 import {DateFactory} from '../utils/date-factory.js';
 import {ShareLinkFactory} from '../utils/share-link-factory.js';
 import {TestConstants} from '../fixtures/test-constants.js';
+import {TestData} from '../fixtures/test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Share Links Management', () => {
 
@@ -205,6 +207,35 @@ test.describe('Share Links Management', () => {
             // Verify the link is displayed
             const linkCard = await shareLinksPage.getLinkCardByName('Database Timeline');
             expect(await linkCard.isVisible()).toBe(true);
+        });
+
+        test('should display timeline share date range using user date format', async ({page, dbManager}) => {
+            const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+            const { shareLinksPage, user } = await TestSetupHelper.setupShareLinksTest(page, dbManager, testUser);
+            const futureExpiry = new Date();
+            futureExpiry.setUTCDate(futureExpiry.getUTCDate() + 30);
+
+            await ShareLinkFactory.createTimeline(dbManager, user.id, {
+                id: '22341234-1234-1234-1234-123412341234',
+                name: 'DMY Timeline',
+                dateRange: {
+                    startDate: new Date('2025-09-21T00:00:00Z'),
+                    endDate: new Date('2025-09-24T00:00:00Z'),
+                    expiresAt: futureExpiry
+                },
+                show_photos: false
+            });
+
+            await page.reload();
+            await shareLinksPage.waitForPageLoad();
+
+            const dateRangeText = await shareLinksPage.getTimelineDateRange('DMY Timeline');
+            DateFormatTestHelper.expectContainsDate(
+                dateRangeText,
+                KnownDateStrings.sep21_2025.DMY,
+                KnownDateStrings.sep21_2025.MDY
+            );
+            expect(dateRangeText).toContain('24/09/2025');
         });
 
         test('should create timeline share via UI', async ({page, dbManager}) => {

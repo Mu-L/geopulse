@@ -2,6 +2,7 @@ import {test, expect} from '../fixtures/database-fixture.js';
 import {FriendsPage} from '../pages/FriendsPage.js';
 import {insertVerifiableStaysTestData, insertVerifiableTripsTestData} from '../utils/timeline-test-data.js';
 import {TestSetupHelper} from "../utils/test-setup-helper.js";
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Friends Page', () => {
 
@@ -801,6 +802,7 @@ test.describe('Friends Page', () => {
     test('should display friend timeline data with date range selection', async ({page, dbManager}) => {
       const {testUser, user, friends, loginPage, friendsPage} =
         await TestSetupHelper.setupMultipleFriendsTest(page, dbManager, 2, false);
+      await dbManager.client.query('UPDATE users SET date_format = $1 WHERE id = $2', [DateFormatValues.DMY, user.id]);
 
       // Create friendships with timeline permissions BEFORE logging in
       await TestSetupHelper.setupFriendship(dbManager, user.id, friends[0].dbUser.id, {
@@ -921,6 +923,10 @@ test.describe('Friends Page', () => {
         await page.waitForTimeout(2000); // Wait for timeline to reload with new date range
       }
 
+      const dateRangeInputValue = await page.locator('.date-range-picker .p-datepicker-input').first().inputValue();
+      expect(dateRangeInputValue).toContain('20/09/2025');
+      expect(dateRangeInputValue).toContain('22/09/2025');
+
       // PHASE 3: Verify timeline items now appear
       timelineItems = page.locator('.friend-timeline-card');
       itemCount = await timelineItems.count();
@@ -928,6 +934,12 @@ test.describe('Friends Page', () => {
       // Each friend has 3 stays and 3 trips = 6 items per friend = 12 total
       // Should now show timeline items for September 21, 2025
       expect(itemCount).toBeGreaterThan(0);
+      const firstTimelineItemText = await timelineItems.first().textContent();
+      DateFormatTestHelper.expectContainsDate(
+        firstTimelineItemText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
       // Verify timeline map is visible
       const timelineMap = page.locator('.leaflet-container');
       expect(await timelineMap.isVisible()).toBe(true);

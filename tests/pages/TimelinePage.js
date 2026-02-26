@@ -2,6 +2,7 @@ import {LoginPage} from './LoginPage.js';
 import {TestHelpers} from '../utils/test-helpers.js';
 import {TestData} from '../fixtures/test-data.js';
 import {UserFactory} from '../utils/user-factory.js';
+import {DateFormatTestHelper} from '../utils/date-format-test-helper.js';
 
 export class TimelinePage {
   constructor(page) {
@@ -27,8 +28,8 @@ export class TimelinePage {
    * Navigate to timeline page with specific date range
    */
   async navigateWithDateRange(startDate, endDate) {
-    const startDateStr = `${String(startDate.getMonth() + 1).padStart(2, '0')}/${String(startDate.getDate()).padStart(2, '0')}/${startDate.getFullYear()}`;
-    const endDateStr = `${String(endDate.getMonth() + 1).padStart(2, '0')}/${String(endDate.getDate()).padStart(2, '0')}/${endDate.getFullYear()}`;
+    const startDateStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+    const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
     
     await this.page.goto(`/app/timeline?start=${startDateStr}&end=${endDateStr}`);
   }
@@ -63,7 +64,13 @@ export class TimelinePage {
    */
   async setupTimelineWithData(dbManager, dataInsertFunction, testUser = TestData.users.existing, dateRange = null) {
     // Login and navigate
-    await this.loginAndNavigate(testUser);
+    await UserFactory.createUser(this.page, testUser);
+    await DateFormatTestHelper.applyDateFormatIfProvided(dbManager, testUser);
+
+    const loginPage = new LoginPage(this.page);
+    await loginPage.navigate();
+    await loginPage.login(testUser.email, testUser.password);
+    await TestHelpers.waitForNavigation(this.page, '**/app/timeline');
     
     // Insert test data
     const user = await dbManager.getUserByEmail(testUser.email);
