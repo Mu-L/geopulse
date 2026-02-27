@@ -63,10 +63,13 @@ const handleLayerReady = (layerGroup) => {
 }
 
 const renderPaths = () => {
-  if (!baseLayerRef.value || !hasPathData.value) return
+  if (!baseLayerRef.value) return
 
-  // Clear existing paths
+  // Always clear existing paths first so stale polylines are removed when
+  // a new range has no path data.
   clearPaths()
+
+  if (!hasPathData.value) return
 
   props.pathData.forEach((pathGroup, groupIndex) => {
 
