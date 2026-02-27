@@ -9,15 +9,7 @@
       <div class="hero-container">
         <!-- Theme Switcher -->
         <div class="theme-switcher">
-          <Button
-            :icon="isDarkMode ? 'pi pi-sun' : 'pi pi-moon'"
-            @click="toggleDarkMode"
-            class="theme-button"
-            severity="secondary"
-            outlined
-            size="small"
-            v-tooltip.bottom="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-          />
+          <DarkModeSwitcher class="theme-button" />
         </div>
         
         <div class="hero-content">
@@ -173,6 +165,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import DarkModeSwitcher from '@/components/DarkModeSwitcher.vue'
 
 // Composables
 const authStore = useAuthStore()
@@ -201,9 +194,6 @@ const isLoginAvailable = computed(() => {
          hasOidcProvidersAvailable.value ||
          authStatus.value.adminLoginBypassEnabled;
 });
-
-// Dark mode state
-const isDarkMode = ref(false)
 
 // Features data
 const features = ref([
@@ -245,18 +235,8 @@ const features = ref([
   }
 ])
 
-// Dark mode methods
-const toggleDarkMode = () => {
-  document.documentElement.classList.toggle('p-dark')
-  isDarkMode.value = document.documentElement.classList.contains('p-dark')
-  localStorage.setItem('darkMode', isDarkMode.value.toString())
-}
-
 // Lifecycle
 onMounted(async () => {
-  // Sync dark mode state with current DOM state (already initialized in main.js)
-  isDarkMode.value = document.documentElement.classList.contains('p-dark')
-
   // Check authentication state to display correct buttons
   await authStore.checkAuth()
 
@@ -324,7 +304,7 @@ onMounted(async () => {
   z-index: 10;
 }
 
-.theme-button {
+.theme-button :deep(.p-button) {
   width: 2.5rem !important;
   height: 2.5rem !important;
   padding: 0 !important;
@@ -339,17 +319,17 @@ onMounted(async () => {
   justify-content: center !important;
 }
 
-.theme-button:hover {
+.theme-button :deep(.p-button:hover) {
   box-shadow: var(--gp-shadow-medium) !important;
   border-color: var(--gp-border-medium) !important;
   transform: translateY(-1px) !important;
 }
 
-.theme-button:focus {
+.theme-button :deep(.p-button:focus) {
   box-shadow: var(--gp-shadow-medium), 0 0 0 3px rgba(26, 86, 219, 0.1) !important;
 }
 
-.theme-button .p-button-icon {
+.theme-button :deep(.p-button-icon) {
   font-size: 1rem !important;
   color: var(--gp-text-primary) !important;
 }
@@ -844,12 +824,12 @@ onMounted(async () => {
     right: 0.5rem;
   }
 
-  .theme-button {
+  .theme-button :deep(.p-button) {
     width: 2.25rem !important;
     height: 2.25rem !important;
   }
 
-  .theme-button .p-button-icon {
+  .theme-button :deep(.p-button-icon) {
     font-size: 0.9rem !important;
   }
 
@@ -893,16 +873,16 @@ onMounted(async () => {
   background: radial-gradient(ellipse at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
 }
 
-.p-dark .theme-button {
+.p-dark .theme-button :deep(.p-button) {
   background: var(--gp-surface-dark) !important;
   border-color: var(--gp-border-dark) !important;
 }
 
-.p-dark .theme-button:hover {
+.p-dark .theme-button :deep(.p-button:hover) {
   border-color: var(--gp-border-medium) !important;
 }
 
-.p-dark .theme-button .p-button-icon {
+.p-dark .theme-button :deep(.p-button-icon) {
   color: var(--gp-text-primary) !important;
 }
 

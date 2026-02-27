@@ -60,12 +60,8 @@
                 <span class="gp-nav-section-title">Appearance</span>
               </div>
               <div class="gp-nav-theme-control">
-                <span class="gp-theme-label">{{ isDarkMode ? 'Dark Mode' : 'Light Mode' }}</span>
-                <ToggleSwitch
-                  v-model="isDarkMode"
-                  @change="toggleDarkMode"
-                  class="toggle-control"
-                />
+                <span class="gp-theme-label">Theme: {{ themeModeLabel }}</span>
+                <DarkModeSwitcher class="gp-theme-switcher" />
               </div>
             </div>
 
@@ -110,9 +106,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Drawer from 'primevue/drawer'
-import ToggleSwitch from 'primevue/toggleswitch'
 import BaseButton from '../base/BaseButton.vue'
 import NavigationSection from './NavigationSection.vue'
+import DarkModeSwitcher from '@/components/DarkModeSwitcher.vue'
+import { useThemeMode } from '@/composables/useThemeMode'
 import { useAuthStore } from '@/stores/auth'
 import { useFriendsStore } from '@/stores/friends'
 import { useErrorHandler } from '@/composables/useErrorHandler'
@@ -133,6 +130,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const friendsStore = useFriendsStore()
 const { handleError } = useErrorHandler()
+const { themeMode, themeModes } = useThemeMode()
 
 // Store refs
 const { userName, isAdmin } = storeToRefs(authStore)
@@ -140,7 +138,6 @@ const { receivedInvitesCount } = storeToRefs(friendsStore)
 
 // Local state
 const visible = ref(false)
-const isDarkMode = ref(false)
 const appVersion = ref('')
 
 // Computed
@@ -151,6 +148,12 @@ const drawerClasses = computed(() => ({
 const toggleClasses = computed(() => ({
   'gp-nav-toggle--compact': props.variant === 'compact'
 }))
+
+const themeModeLabel = computed(() => {
+  if (themeMode.value === themeModes.LIGHT) return 'Light'
+  if (themeMode.value === themeModes.DARK) return 'Dark'
+  return 'System'
+})
 
 const mainItems = computed(() => [
   {
@@ -346,31 +349,8 @@ const fetchVersion = async () => {
   }
 }
 
-// Dark mode functionality
-const toggleDarkMode = () => {
-  document.documentElement.classList.toggle('p-dark')
-  isDarkMode.value = document.documentElement.classList.contains('p-dark')
-  // Save preference to localStorage
-  localStorage.setItem('darkMode', isDarkMode.value.toString())
-}
-
-// Initialize dark mode from localStorage and load friends data
+// Load friends data and version
 onMounted(async () => {
-  const savedDarkMode = localStorage.getItem('darkMode')
-  if (savedDarkMode === 'true') {
-    document.documentElement.classList.add('p-dark')
-    isDarkMode.value = true
-  } else if (savedDarkMode === 'false') {
-    document.documentElement.classList.remove('p-dark')
-    isDarkMode.value = false
-  } else {
-    // Check system preference if no saved preference
-    isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches
-    if (isDarkMode.value) {
-      document.documentElement.classList.add('p-dark')
-    }
-  }
-  
   // Load received invitations count for badge display
   try {
     await friendsStore.fetchReceivedInvitations()
@@ -480,6 +460,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--gp-spacing-sm);
 }
 
 .gp-theme-label {
@@ -571,17 +552,10 @@ onMounted(async () => {
   color: var(--gp-text-primary);
 }
 
-/* Dark mode toggle switch */
-.p-dark :deep(.p-toggleswitch .p-toggleswitch-slider) {
-  background: var(--gp-surface-darker);
-}
-
-.p-dark :deep(.p-toggleswitch .p-toggleswitch-handle) {
-  display: none;
-}
-
-.p-dark :deep(.p-toggleswitch.p-toggleswitch-checked .p-toggleswitch-handle) {
-  display: none;
+.gp-theme-switcher :deep(.p-button) {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0.5rem;
 }
 
 .p-dark .gp-nav-user {
