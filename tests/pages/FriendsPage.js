@@ -130,8 +130,10 @@ export class FriendsPage {
   }
 
   async waitForPageLoad() {
-    await this.page.waitForLoadState('networkidle');
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForURL('**/app/friends**');
+    await this.page.waitForLoadState('domcontentloaded');
+    await expect(this.page.locator(this.selectors.tabs.live)).toBeVisible({ timeout: 15000 });
+    await this.page.waitForTimeout(500);
   }
 
   /**

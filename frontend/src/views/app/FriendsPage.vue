@@ -80,7 +80,7 @@ x
 </template>
 
 <script setup>
-import {ref, computed, onMounted, reactive, watch, h} from 'vue'
+import {ref, computed, onMounted, onUnmounted, reactive, watch, h} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 import {storeToRefs} from 'pinia'
 import {useToast} from 'primevue/usetoast'
@@ -89,8 +89,6 @@ import {useTimezone} from '@/composables/useTimezone'
 import {useLocationStore} from '@/stores/location'
 import {useAuthStore} from '@/stores/auth'
 import AutoComplete from 'primevue/autocomplete'
-
-const timezone = useTimezone()
 
 // Layout components
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
@@ -258,6 +256,9 @@ const dataLoading = ref(true)
 const friendsMapTabRef = ref(null)
 const initialFriendEmailToZoom = ref(null)
 const filteredUsers = ref(null)
+const LIVE_TAB_POLL_INTERVAL_MS = 15 * 1000 // 15 seconds
+let liveTabPollIntervalId = null
+let liveTabPollInFlight = false
 
 // Form data
 const inviteForm = ref({
@@ -597,6 +598,27 @@ const handleShowAll = () => {
   });
 }
 
+const updateCurrentUserFromLastPosition = (lastPosition) => {
+  if (!lastPosition) return
+
+  const user = authStore.user
+  currentUser.value = {
+    ...user,
+    latitude: lastPosition.lat,
+    longitude: lastPosition.lon,
+    timestamp: lastPosition.timestamp
+  }
+}
+
+const refreshLiveMapData = async () => {
+  const [_, lastPosition] = await Promise.all([
+    friendsStore.fetchFriends(),
+    locationStore.getLastKnownPosition()
+  ])
+
+  updateCurrentUserFromLastPosition(lastPosition)
+}
+
 const refreshFriendsData = async () => {
   refreshing.value = true
 
@@ -607,15 +629,7 @@ const refreshFriendsData = async () => {
       locationStore.getLastKnownPosition()
     ])
 
-    if (lastPosition) {
-      const user = authStore.user
-      currentUser.value = {
-        ...user,
-        latitude: lastPosition.lat,
-        longitude: lastPosition.lon,
-        timestamp: lastPosition.timestamp
-      }
-    }
+    updateCurrentUserFromLastPosition(lastPosition)
 
     toast.add({
       severity: 'success',
@@ -634,6 +648,62 @@ const refreshFriendsData = async () => {
   } finally {
     refreshing.value = false
   }
+}
+
+const stopLiveTabPolling = () => {
+  if (liveTabPollIntervalId) {
+    clearInterval(liveTabPollIntervalId)
+    liveTabPollIntervalId = null
+  }
+}
+
+const canPollLiveTab = () => {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+    return false
+  }
+
+  return activeTab.value === 'live' && !dataLoading.value && !refreshing.value
+}
+
+const pollLiveTabData = async () => {
+  if (!canPollLiveTab() || liveTabPollInFlight) {
+    return
+  }
+
+  liveTabPollInFlight = true
+
+  try {
+    await refreshLiveMapData()
+  } catch (error) {
+    console.error('Error polling live friends map data:', error)
+  } finally {
+    liveTabPollInFlight = false
+  }
+}
+
+const ensureLiveTabPolling = () => {
+  if (!canPollLiveTab()) {
+    stopLiveTabPolling()
+    return
+  }
+
+  if (liveTabPollIntervalId) {
+    return
+  }
+
+  liveTabPollIntervalId = setInterval(() => {
+    pollLiveTabData()
+  }, LIVE_TAB_POLL_INTERVAL_MS)
+}
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    ensureLiveTabPolling()
+    pollLiveTabData()
+    return
+  }
+
+  stopLiveTabPolling()
 }
 
 const searchUsers = async (event) => {
@@ -662,15 +732,7 @@ onMounted(async () => {
       locationStore.getLastKnownPosition()
     ])
 
-    if (lastPosition) {
-      const user = authStore.user
-      currentUser.value = {
-        ...user,
-        latitude: lastPosition.lat,
-        longitude: lastPosition.lon,
-        timestamp: lastPosition.timestamp
-      }
-    }
+    updateCurrentUserFromLastPosition(lastPosition)
 
   } catch (error) {
     console.error('Error loading friends page data:', error)
@@ -682,6 +744,20 @@ onMounted(async () => {
     })
   } finally {
     dataLoading.value = false
+    ensureLiveTabPolling()
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+watch([activeTab, dataLoading], () => {
+  ensureLiveTabPolling()
+}, { immediate: true })
+
+onUnmounted(() => {
+  stopLiveTabPolling()
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
   }
 })
 </script>
