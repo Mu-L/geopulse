@@ -4,28 +4,44 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.github.tess1o.geopulse.immich.client.ImmichClient;
 import org.github.tess1o.geopulse.immich.model.*;
 import org.github.tess1o.geopulse.shared.geo.GeoUtils;
 import org.github.tess1o.geopulse.user.model.UserEntity;
 import org.github.tess1o.geopulse.user.repository.UserRepository;
 
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
 @Slf4j
 public class ImmichService {
+    private static final int PHOTO_SEARCH_RESPONSE_MAX_LIMIT = 5000;
+
+    private final ConcurrentHashMap<PhotoSearchCacheKey, CachedPhotoSearchResult> photoSearchCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<PhotoSearchCacheKey, CompletableFuture<List<ImmichPhotoDto>>> inFlightPhotoSearches = new ConcurrentHashMap<>();
 
     @Inject
     ImmichClient immichClient;
 
     @Inject
     UserRepository userRepository;
+
+    @ConfigProperty(name = "immich.photos.search-cache-ttl-seconds", defaultValue = "300")
+    long photoSearchCacheTtlSeconds;
+
+    @ConfigProperty(name = "immich.photos.search-cache-max-entries", defaultValue = "200")
+    int photoSearchCacheMaxEntries;
 
     public CompletableFuture<ImmichPhotoSearchResponse> searchPhotos(UUID userId, ImmichPhotoSearchRequest searchRequest) {
         log.debug("Searching photos for user {} with params: {}", userId, searchRequest);
@@ -48,30 +64,34 @@ public class ImmichService {
                 .takenAfter(searchRequest.getStartDate().format(DateTimeFormatter.ISO_INSTANT))
                 .takenBefore(searchRequest.getEndDate().format(DateTimeFormatter.ISO_INSTANT))
                 .type("IMAGE")
+                .city(trimToNull(searchRequest.getCity()))
+                .country(trimToNull(searchRequest.getCountry()))
                 .withExif(true)
                 .build();
 
-        return immichClient.searchAssets(immichPrefs.getServerUrl(), immichPrefs.getApiKey(), immichSearchRequest)
-                .thenApply(response -> {
-                    List<ImmichAsset> assets = response.getAssets().getItems();
+        PhotoSearchCacheKey cacheKey = PhotoSearchCacheKey.from(userId, searchRequest, immichSearchRequest);
+        List<ImmichPhotoDto> cachedPhotos = getCachedSearchResult(cacheKey);
+        if (cachedPhotos != null) {
+            log.debug("Returning cached Immich search result for user {} with {} photos", userId, cachedPhotos.size());
+            return CompletableFuture.completedFuture(buildSearchResponse(cachedPhotos, searchRequest.getLimit()));
+        }
 
-                    List<ImmichPhotoDto> filteredPhotos = assets.stream()
-                            .filter(asset -> filterByLocation(asset, searchRequest))
-                            .map(asset -> mapToPhotoDto(asset, userId))
-                            .collect(Collectors.toList());
+        CompletableFuture<List<ImmichPhotoDto>> inFlightSearch = inFlightPhotoSearches.computeIfAbsent(cacheKey, ignored ->
+                immichClient.searchAssetsAllPages(immichPrefs.getServerUrl(), immichPrefs.getApiKey(), immichSearchRequest)
+                        .thenApply(response -> {
+                            List<ImmichPhotoDto> allFilteredPhotos = extractAndFilterPhotos(response, searchRequest, userId);
+                            cacheSearchResult(cacheKey, allFilteredPhotos);
+                            return allFilteredPhotos;
+                        })
+                        .whenComplete((ignoredResult, throwable) -> {
+                            inFlightPhotoSearches.remove(cacheKey);
+                            if (throwable != null) {
+                                log.error("Failed to search photos for user {}: {}", userId, throwable.getMessage(), throwable);
+                            }
+                        })
+        );
 
-                    return ImmichPhotoSearchResponse.builder()
-                            .photos(filteredPhotos)
-                            .totalCount(filteredPhotos.size())
-                            .build();
-                })
-                .exceptionally(throwable -> {
-                    log.error("Failed to search photos for user {}: {}", userId, throwable.getMessage(), throwable);
-                    return ImmichPhotoSearchResponse.builder()
-                            .photos(List.of())
-                            .totalCount(0)
-                            .build();
-                });
+        return inFlightSearch.thenApply(allFilteredPhotos -> buildSearchResponse(allFilteredPhotos, searchRequest.getLimit()));
     }
 
     public CompletableFuture<byte[]> getPhotoThumbnail(UUID userId, String photoId) {
@@ -119,6 +139,7 @@ public class ImmichService {
 
         user.setImmichPreferences(immichPrefs);
         userRepository.persist(user);
+        invalidateSearchCacheForUser(userId);
 
         log.info("Updated Immich config for user {}", userId);
     }
@@ -161,10 +182,15 @@ public class ImmichService {
         return immichClient.searchAssets(serverUrl, apiKey, testSearchRequest)
                 .thenApply(response -> {
                     log.info("Successfully connected to Immich server at {} for user {}", serverUrl, userId);
+                    int totalAssets = response != null
+                            && response.getAssets() != null
+                            && response.getAssets().getTotal() != null
+                            ? response.getAssets().getTotal()
+                            : 0;
                     return TestImmichConnectionResponse.builder()
                             .success(true)
                             .message("Successfully connected to Immich server")
-                            .details(String.format("Server responded with %d total assets", response.getAssets().getTotal()))
+                            .details(String.format("Server responded with %d total assets", totalAssets))
                             .build();
                 })
                 .exceptionally(throwable -> {
@@ -258,5 +284,176 @@ public class ImmichService {
         }
 
         return normalized;
+    }
+
+    private int resolveLimit(Integer requestedLimit) {
+        if (requestedLimit == null || requestedLimit <= 0) {
+            return Integer.MAX_VALUE;
+        }
+        return Math.min(requestedLimit, PHOTO_SEARCH_RESPONSE_MAX_LIMIT);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private ImmichPhotoDto pickMostRecentPhoto(ImmichPhotoDto first, ImmichPhotoDto second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        if (first.getTakenAt() == null) {
+            return second;
+        }
+        if (second.getTakenAt() == null) {
+            return first;
+        }
+        return first.getTakenAt().isAfter(second.getTakenAt()) ? first : second;
+    }
+
+    private List<ImmichPhotoDto> extractAndFilterPhotos(ImmichSearchResponse response, ImmichPhotoSearchRequest searchRequest, UUID userId) {
+        List<ImmichAsset> assets = response.getAssets() != null && response.getAssets().getItems() != null
+                ? response.getAssets().getItems()
+                : List.of();
+
+        return assets.stream()
+                .filter(asset -> filterByLocation(asset, searchRequest))
+                .map(asset -> mapToPhotoDto(asset, userId))
+                .collect(Collectors.toMap(
+                        ImmichPhotoDto::getId,
+                        photo -> photo,
+                        this::pickMostRecentPhoto,
+                        LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .sorted(Comparator.comparing(
+                        ImmichPhotoDto::getTakenAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .collect(Collectors.toList());
+    }
+
+    private ImmichPhotoSearchResponse buildSearchResponse(List<ImmichPhotoDto> allFilteredPhotos, Integer limit) {
+        List<ImmichPhotoDto> filteredPhotos = allFilteredPhotos.stream()
+                .limit(resolveLimit(limit))
+                .collect(Collectors.toList());
+
+        return ImmichPhotoSearchResponse.builder()
+                .photos(filteredPhotos)
+                .totalCount(allFilteredPhotos.size())
+                .build();
+    }
+
+    private List<ImmichPhotoDto> getCachedSearchResult(PhotoSearchCacheKey cacheKey) {
+        evictExpiredSearchCacheEntries();
+        long nowEpochMillis = Instant.now().toEpochMilli();
+        CachedPhotoSearchResult cachedResult = photoSearchCache.computeIfPresent(cacheKey, (ignored, value) -> {
+            if (value.expiresAtEpochMillis() <= nowEpochMillis) {
+                return null;
+            }
+            return value.touch(nowEpochMillis);
+        });
+        if (cachedResult == null) {
+            return null;
+        }
+        return cachedResult.photos();
+    }
+
+    private void cacheSearchResult(PhotoSearchCacheKey cacheKey, List<ImmichPhotoDto> allFilteredPhotos) {
+        long nowEpochMillis = Instant.now().toEpochMilli();
+        long ttlSeconds = Math.max(photoSearchCacheTtlSeconds, 1L);
+        long expiresAtEpochMillis = nowEpochMillis + ttlSeconds * 1000L;
+        photoSearchCache.put(cacheKey, new CachedPhotoSearchResult(
+                List.copyOf(allFilteredPhotos),
+                expiresAtEpochMillis,
+                nowEpochMillis
+        ));
+
+        evictExpiredSearchCacheEntries();
+        evictSearchCacheEntriesForSizeLimit();
+    }
+
+    private void invalidateSearchCacheForUser(UUID userId) {
+        int before = photoSearchCache.size();
+        photoSearchCache.entrySet().removeIf(entry -> entry.getKey().userId().equals(userId));
+        int removed = before - photoSearchCache.size();
+        if (removed > 0) {
+            log.debug("Invalidated {} Immich photo cache entries for user {}", removed, userId);
+        }
+        inFlightPhotoSearches.entrySet().removeIf(entry -> entry.getKey().userId().equals(userId));
+    }
+
+    private void evictExpiredSearchCacheEntries() {
+        long nowEpochMillis = Instant.now().toEpochMilli();
+        photoSearchCache.entrySet().removeIf(entry -> entry.getValue().expiresAtEpochMillis() <= nowEpochMillis);
+    }
+
+    private void evictSearchCacheEntriesForSizeLimit() {
+        int maxEntries = Math.max(photoSearchCacheMaxEntries, 1);
+        int overflow = photoSearchCache.size() - maxEntries;
+        if (overflow <= 0) {
+            return;
+        }
+
+        List<PhotoSearchCacheKey> keysToRemove = photoSearchCache.entrySet().stream()
+                .sorted(
+                        Comparator.<Map.Entry<PhotoSearchCacheKey, CachedPhotoSearchResult>>comparingLong(
+                                        entry -> entry.getValue().lastAccessEpochMillis())
+                                .thenComparingLong(entry -> entry.getValue().expiresAtEpochMillis())
+                )
+                .limit(overflow)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        keysToRemove.forEach(photoSearchCache::remove);
+        if (!keysToRemove.isEmpty()) {
+            log.debug("Evicted {} Immich photo cache entries due to size limit {}", keysToRemove.size(), maxEntries);
+        }
+    }
+
+    private record CachedPhotoSearchResult(List<ImmichPhotoDto> photos, long expiresAtEpochMillis,
+                                           long lastAccessEpochMillis) {
+        private CachedPhotoSearchResult touch(long touchedAtEpochMillis) {
+            return new CachedPhotoSearchResult(photos, expiresAtEpochMillis, touchedAtEpochMillis);
+        }
+    }
+
+    private record PhotoSearchCacheKey(
+            UUID userId,
+            String takenAfter,
+            String takenBefore,
+            Double latitude,
+            Double longitude,
+            Double radiusMeters,
+            String city,
+            String country
+    ) {
+        static PhotoSearchCacheKey from(UUID userId, ImmichPhotoSearchRequest request, ImmichSearchRequest immichRequest) {
+            return new PhotoSearchCacheKey(
+                    userId,
+                    immichRequest.getTakenAfter(),
+                    immichRequest.getTakenBefore(),
+                    request.getLatitude(),
+                    request.getLongitude(),
+                    request.getRadiusMeters(),
+                    trim(request.getCity()),
+                    trim(request.getCountry())
+            );
+        }
+
+        private static String trim(String value) {
+            if (value == null) {
+                return null;
+            }
+            String trimmed = value.trim();
+            return trimmed.isEmpty() ? null : trimmed;
+        }
     }
 }

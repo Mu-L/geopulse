@@ -45,6 +45,7 @@
             :dateRange="dateRange"
             @timeline-item-click="handleTimelineItemClick"
             @tag-clicked="handleTagClicked"
+            @photo-show-on-map="handleTimelinePhotoShowOnMap"
         />
           </div>
         </div>
@@ -363,6 +364,10 @@ const handleTagClicked = (tag) => {
     detail: `Timeline updated to show ${tag.tagName} period`,
     life: 3000
   })
+}
+
+const handleTimelinePhotoShowOnMap = (photo) => {
+  mapViewRef.value?.focusOnPhoto?.(photo)
 }
 
 // Lifecycle

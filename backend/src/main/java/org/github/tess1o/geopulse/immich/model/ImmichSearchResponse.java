@@ -14,6 +14,8 @@ public class ImmichSearchResponse {
     public static class ImmichSearchAssets {
         private Integer total;
         private Integer count;
+        private Integer page;
+        private Integer nextPage;
         private List<ImmichAsset> items;
     }
 }

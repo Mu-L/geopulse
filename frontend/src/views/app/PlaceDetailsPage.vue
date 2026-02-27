@@ -95,9 +95,24 @@
       <!-- Map -->
       <PlaceMap
         v-if="placeDetails.geometry"
+        ref="placeMapRef"
         :key="`place-map-${placeType}-${placeId}`"
         :geometry="placeDetails.geometry"
         :location-name="placeDetails.locationName"
+        :photos="placePhotosForMap"
+        @photo-click="handleMapPhotoClick"
+      />
+
+      <ImmichLatestPhotosSection
+        v-if="placeImmichSearchParams"
+        ref="placePhotosSectionRef"
+        :title="`Latest photos near ${placeDetails.locationName}`"
+        :search-params="placeImmichSearchParams"
+        :in-memory-filter="placePhotoFilterFn"
+        :in-memory-filter-cache-key="placePhotoFilterCacheKey"
+        empty-message="No nearby Immich photos found for this place."
+        @latest-photos-change="handlePlacePhotosChange"
+        @show-on-map="handlePlacePhotoShowOnMap"
       />
 
       <!-- Visits Table -->
@@ -209,6 +224,7 @@ import PlaceHeader from '@/components/place/PlaceHeader.vue'
 import PlaceStatsCard from '@/components/place/PlaceStatsCard.vue'
 import PlaceMap from '@/components/place/PlaceMap.vue'
 import PlaceVisitsTable from '@/components/place/PlaceVisitsTable.vue'
+import ImmichLatestPhotosSection from '@/components/location-analytics/ImmichLatestPhotosSection.vue'
 
 // Dialogs
 import EditFavoriteDialog from '@/components/dialogs/EditFavoriteDialog.vue'
@@ -217,6 +233,7 @@ import TimelineRegenerationModal from '@/components/dialogs/TimelineRegeneration
 
 import { useTimelineRegeneration } from '@/composables/useTimelineRegeneration'
 import { useFavoriteEditor } from '@/composables/useFavoriteEditor'
+import { useImmichPhotoMapBridge } from '@/composables/useImmichPhotoMapBridge'
 
 // Store
 import { usePlaceStatisticsStore } from '@/stores/placeStatistics'
@@ -254,6 +271,21 @@ const currentSortBy = ref('timestamp')
 const currentSortDirection = ref('desc')
 const showCreateFavoriteDialog = ref(false)
 const newFavoriteName = ref('')
+const placeMapRef = ref(null)
+const placePhotosSectionRef = ref(null)
+const {
+  photosForMap: placePhotosForMap,
+  resetPhotosForMap: resetPlacePhotosForMap,
+  handlePhotosChange: handlePlacePhotosChange,
+  handleMapPhotoClick,
+  handlePhotoShowOnMap: handlePlacePhotoShowOnMap
+} = useImmichPhotoMapBridge({
+  mapRef: placeMapRef,
+  photosSectionRef: placePhotosSectionRef,
+  focusZoom: 16
+})
+
+const PLACE_PHOTO_RADIUS_METERS = 100
 
 // Favorite editor composable (for editing favorite places)
 const {
@@ -305,7 +337,101 @@ const relatedFavoriteMessage = computed(() => {
   return 'Your visits to this location are being tracked under your nearby favorite:'
 })
 
+const placeImmichSearchParams = computed(() => {
+  const firstVisit = placeDetails.value?.statistics?.firstVisit
+  const lastVisit = placeDetails.value?.statistics?.lastVisit
+  const city = placeDetails.value?.city?.trim?.()
+  const country = placeDetails.value?.country?.trim?.()
+
+  if (!firstVisit || !lastVisit || (!city && !country)) {
+    return null
+  }
+
+  return {
+    startDate: firstVisit,
+    endDate: lastVisit,
+    city: city || undefined,
+    country: country || undefined
+  }
+})
+
+const placePhotoFilterCacheKey = computed(() => {
+  const geometry = placeDetails.value?.geometry
+  if (!geometry) {
+    return `place:${placeType.value}:${placeId.value}:nogeometry`
+  }
+
+  if (geometry.type === 'area' && geometry.northEast && geometry.southWest) {
+    return [
+      `place:${placeType.value}:${placeId.value}:area`,
+      geometry.northEast[0],
+      geometry.northEast[1],
+      geometry.southWest[0],
+      geometry.southWest[1]
+    ].join(':')
+  }
+
+  return [
+    `place:${placeType.value}:${placeId.value}:point`,
+    geometry.latitude ?? 'na',
+    geometry.longitude ?? 'na',
+    PLACE_PHOTO_RADIUS_METERS
+  ].join(':')
+})
+
 // Methods
+const toRadians = (value) => (value * Math.PI) / 180
+
+const haversineDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const earthRadiusMeters = 6371000
+  const dLat = toRadians(lat2 - lat1)
+  const dLon = toRadians(lon2 - lon1)
+
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return earthRadiusMeters * c
+}
+
+const isPhotoInsideArea = (photoLatitude, photoLongitude, northEast, southWest) => {
+  if (!Array.isArray(northEast) || !Array.isArray(southWest)) {
+    return false
+  }
+
+  return photoLatitude <= northEast[0] &&
+    photoLatitude >= southWest[0] &&
+    photoLongitude <= northEast[1] &&
+    photoLongitude >= southWest[1]
+}
+
+const placePhotoFilterFn = (photo) => {
+  if (!photo || typeof photo.latitude !== 'number' || typeof photo.longitude !== 'number') {
+    return false
+  }
+
+  const geometry = placeDetails.value?.geometry
+  if (!geometry) {
+    return true
+  }
+
+  if (geometry.type === 'area' && geometry.northEast && geometry.southWest) {
+    return isPhotoInsideArea(photo.latitude, photo.longitude, geometry.northEast, geometry.southWest)
+  }
+
+  if (typeof geometry.latitude !== 'number' || typeof geometry.longitude !== 'number') {
+    return false
+  }
+
+  return haversineDistanceMeters(
+    geometry.latitude,
+    geometry.longitude,
+    photo.latitude,
+    photo.longitude
+  ) <= PLACE_PHOTO_RADIUS_METERS
+}
+
 const formatDistance = (meters) => {
   if (meters === 0) return '0m'
   if (meters < 1000) {
@@ -364,6 +490,7 @@ const submitCreateFavorite = () => {
 }
 const loadPlaceData = async () => {
   error.value = null
+  resetPlacePhotosForMap()
 
   try {
     // Load place details
@@ -595,6 +722,7 @@ const handleSaveGeocoding = async (updatedData) => {
 onMounted(async () => {
   // Clear previous data
   placeStore.clearPlaceData()
+  resetPlacePhotosForMap()
 
   // Load new data
   await loadPlaceData()
@@ -608,6 +736,7 @@ watch(
     if (newType !== oldType || newId !== oldId) {
       // Clear previous data
       placeStore.clearPlaceData()
+      resetPlacePhotosForMap()
 
       // Load new data
       await loadPlaceData()

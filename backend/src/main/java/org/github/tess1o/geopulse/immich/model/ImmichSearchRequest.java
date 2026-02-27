@@ -12,6 +12,10 @@ public class ImmichSearchRequest {
     private String takenAfter;
     private String takenBefore;
     private String type;
+    private String city;
+    private String country;
+    private Integer page;
+    private Integer size;
     
     @JsonProperty("withExif")
     private boolean withExif;

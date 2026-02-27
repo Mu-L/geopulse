@@ -16,4 +16,7 @@ public class ImmichPhotoSearchRequest {
     private Double latitude;
     private Double longitude;
     private Double radiusMeters;
+    private String city;
+    private String country;
+    private Integer limit;
 }

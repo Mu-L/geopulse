@@ -91,9 +91,21 @@
         <!-- Map with city centroid -->
         <PlaceMap
           v-if="cityDetails && cityDetails.geometry && !isLoading"
+          ref="placeMapRef"
           :key="`city-map-${cityName}-${cityDetails.cityName}`"
           :geometry="cityDetails.geometry"
           :location-name="cityDetails.cityName"
+          :photos="cityPhotosForMap"
+          @photo-click="handleMapPhotoClick"
+        />
+
+        <ImmichLatestPhotosSection
+          ref="cityPhotosSectionRef"
+          :title="`Latest photos in ${cityDetails.cityName}`"
+          :search-params="cityImmichSearchParams"
+          empty-message="No Immich photos found for this city."
+          @latest-photos-change="handleCityPhotosChange"
+          @show-on-map="handleCityPhotoShowOnMap"
         />
 
         <!-- Visits Table -->
@@ -126,6 +138,8 @@ import BaseCard from '@/components/ui/base/BaseCard.vue'
 import PlaceStatsCard from '@/components/place/PlaceStatsCard.vue'
 import PlaceMap from '@/components/place/PlaceMap.vue'
 import PlaceVisitsTable from '@/components/place/PlaceVisitsTable.vue'
+import ImmichLatestPhotosSection from '@/components/location-analytics/ImmichLatestPhotosSection.vue'
+import { useImmichPhotoMapBridge } from '@/composables/useImmichPhotoMapBridge'
 
 import { useLocationAnalyticsStore } from '@/stores/locationAnalytics'
 
@@ -141,6 +155,20 @@ const visitsLoading = ref(false)
 const currentSortBy = ref('timestamp')
 const currentSortDirection = ref('desc')
 
+const placeMapRef = ref(null)
+const cityPhotosSectionRef = ref(null)
+const {
+  photosForMap: cityPhotosForMap,
+  resetPhotosForMap: resetCityPhotosForMap,
+  handlePhotosChange: handleCityPhotosChange,
+  handleMapPhotoClick,
+  handlePhotoShowOnMap: handleCityPhotoShowOnMap
+} = useImmichPhotoMapBridge({
+  mapRef: placeMapRef,
+  photosSectionRef: cityPhotosSectionRef,
+  focusZoom: 16
+})
+
 const cityName = computed(() => route.params.name)
 const pageTitle = computed(() => {
   return cityDetails.value
@@ -149,6 +177,23 @@ const pageTitle = computed(() => {
 })
 const isLoading = computed(() => loading.value)
 const pagination = computed(() => cityPagination.value)
+
+const cityImmichSearchParams = computed(() => {
+  const firstVisit = cityDetails.value?.statistics?.firstVisit
+  const lastVisit = cityDetails.value?.statistics?.lastVisit
+  const city = cityDetails.value?.cityName
+
+  if (!firstVisit || !lastVisit || !city) {
+    return null
+  }
+
+  return {
+    startDate: firstVisit,
+    endDate: lastVisit,
+    city,
+    country: cityDetails.value?.country
+  }
+})
 
 const formatDuration = (seconds) => {
   const hours = Math.floor(seconds / 3600)
@@ -161,6 +206,7 @@ const formatDuration = (seconds) => {
 
 const loadCityData = async () => {
   error.value = null
+  resetCityPhotosForMap()
 
   try {
     await store.fetchCityDetails(cityName.value)
@@ -269,6 +315,7 @@ watch(
   async (newName, oldName) => {
     if (newName !== oldName) {
       store.clearCityData()
+      resetCityPhotosForMap()
       await loadCityData()
     }
   }

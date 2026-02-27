@@ -5,9 +5,15 @@
     @contextmenu="showContextMenu"
   >
     <template #title>
-      <p class="timeline-timestamp">
-        🕐 {{ formattedTimestamp }}
-      </p>
+      <div class="timeline-title-row">
+        <p class="timeline-timestamp">
+          🕐 {{ formattedTimestamp }}
+        </p>
+        <TimelinePhotoPreviewTrigger
+          :photos="matchingPhotos"
+          @photo-show-on-map="handlePhotoShowOnMap"
+        />
+      </div>
     </template>
 
     <template #subtitle>
@@ -46,15 +52,21 @@
 import { ref, computed } from 'vue'
 import { formatDistance, formatDuration } from '@/utils/calculationsHelpers'
 import { useTimezone } from '@/composables/useTimezone'
+import { useTimelineCardPhotoMatching } from '@/composables/useTimelineCardPhotoMatching'
+import TimelinePhotoPreviewTrigger from './TimelinePhotoPreviewTrigger.vue'
 
 const props = defineProps({
   tripItem: {
     type: Object,
     required: true
+  },
+  immichPhotos: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['click', 'export-gpx', 'show-classification'])
+const emit = defineEmits(['click', 'export-gpx', 'show-classification', 'photo-show-on-map'])
 
 const contextMenu = ref(null)
 const contextMenuItems = ref([
@@ -76,6 +88,12 @@ const contextMenuItems = ref([
 
 const timezone = useTimezone()
 
+const { matchingPhotos } = useTimelineCardPhotoMatching({
+  itemRef: computed(() => props.tripItem),
+  immichPhotosRef: computed(() => props.immichPhotos),
+  durationField: 'tripDuration'
+})
+
 // Movement type mapping
 const movementTypeMap = {
   WALK: { label: 'Walk', icon: '🚶' },
@@ -93,6 +111,10 @@ const formatMovementType = (type) => {
 
 const handleClick = () => {
   emit('click', props.tripItem)
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  emit('photo-show-on-map', photo)
 }
 
 const showContextMenu = (event) => {
@@ -162,6 +184,13 @@ const formattedTimestamp = computed(() => {
   font-size: 0.95rem;
   margin: 0;
   line-height: 1.2;
+}
+
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gp-spacing-sm);
 }
 
 .timeline-subtitle {

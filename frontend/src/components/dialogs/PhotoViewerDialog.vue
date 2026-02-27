@@ -67,7 +67,7 @@
           <span class="detail-value">{{ formatDate(currentPhoto.takenAt) }}</span>
         </div>
         
-        <div v-if="currentPhoto.latitude && currentPhoto.longitude" class="detail-row">
+        <div v-if="hasCoordinates" class="detail-row">
           <span class="detail-label">Location:</span>
           <span class="detail-value">{{ currentPhoto.latitude.toFixed(6) }}, {{ currentPhoto.longitude.toFixed(6) }}</span>
         </div>
@@ -75,6 +75,15 @@
 
       <!-- Actions -->
       <div class="photo-actions">
+        <Button
+          v-if="hasCoordinates && allowShowOnMap"
+          label="Show on Map"
+          icon="pi pi-map-marker"
+          @click="showOnMap"
+          severity="secondary"
+          size="small"
+        />
+
         <Button
           v-if="currentPhoto?.downloadUrl"
           label="Download Original"
@@ -120,10 +129,14 @@ const props = defineProps({
   initialPhotoIndex: {
     type: Number,
     default: 0
+  },
+  allowShowOnMap: {
+    type: Boolean,
+    default: true
   }
 })
 
-const emit = defineEmits(['update:visible', 'close'])
+const emit = defineEmits(['update:visible', 'close', 'show-on-map'])
 const toast = useToast()
 
 // State
@@ -147,6 +160,11 @@ const dialogTitle = computed(() => {
   }
   
   return currentPhoto.value.originalFileName || 'Photo'
+})
+
+const hasCoordinates = computed(() => {
+  return typeof currentPhoto.value?.latitude === 'number' &&
+    typeof currentPhoto.value?.longitude === 'number'
 })
 
 // Methods
@@ -247,6 +265,15 @@ const handleImageError = () => {
   imageError.value = true
 }
 
+const showOnMap = () => {
+  if (!hasCoordinates.value || !currentPhoto.value) {
+    return
+  }
+
+  emit('show-on-map', currentPhoto.value)
+  handleClose()
+}
+
 
 const downloadPhoto = async () => {
   if (!currentPhoto.value?.downloadUrl || downloading.value) return
@@ -314,6 +341,7 @@ watch(() => props.visible, (newVisible) => {
   if (newVisible) {
     currentIndex.value = Math.max(0, props.initialPhotoIndex || 0)
     resetImageState()
+    loadCurrentPhoto()
     
     // Add keyboard listener
     nextTick(() => {

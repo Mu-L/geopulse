@@ -152,6 +152,7 @@
           v-model:visible="photoViewerVisible"
           :photos="photoViewerPhotos"
           :initial-photo-index="photoViewerIndex"
+          @show-on-map="handlePhotoShowOnMap"
           @close="closePhotoViewer"
         />
 
@@ -565,6 +566,19 @@ const handlePhotoClick = (event) => {
 
 const handlePhotoHover = (event) => {
   // Could show preview tooltip in the future
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  if (!photo || typeof photo.latitude !== 'number' || typeof photo.longitude !== 'number' || !map.value) {
+    return
+  }
+
+  const targetZoom = Math.max(map.value.getZoom?.() || 0, 16)
+  map.value.setView([photo.latitude, photo.longitude], targetZoom, { animate: true })
+}
+
+const focusOnPhoto = (photo) => {
+  handlePhotoShowOnMap(photo)
 }
 
 const handleImmichError = (event) => {
@@ -1027,7 +1041,8 @@ onMounted(() => {
 defineExpose({
   map: readonly(map),
   clearAllHighlights: clearAllMapHighlights,
-  zoomToData: handleZoomToData
+  zoomToData: handleZoomToData,
+  focusOnPhoto
 })
 </script>
 

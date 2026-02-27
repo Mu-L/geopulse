@@ -105,6 +105,25 @@
           </div>
         </BaseCard>
 
+        <ImmichPhotosMapCard
+          v-if="countryPhotosForMap.length > 0"
+          ref="countryPhotosMapRef"
+          :key="`country-photos-map-${countryName}`"
+          :title="`Photo locations in ${countryDetails.countryName}`"
+          :photos="countryPhotosForMap"
+          @photo-click="handleCountryMapPhotoClick"
+        />
+
+        <ImmichLatestPhotosSection
+          ref="countryPhotosSectionRef"
+          :title="`Latest photos in ${countryDetails.countryName}`"
+          :search-params="countryImmichSearchParams"
+          empty-message="No Immich photos found for this country."
+          :show-on-map-enabled="true"
+          @latest-photos-change="handleCountryPhotosChange"
+          @show-on-map="handleCountryPhotoShowOnMap"
+        />
+
         <!-- Visits Table -->
         <PlaceVisitsTable
           :visits="countryVisits"
@@ -136,6 +155,9 @@ import PageContainer from '@/components/ui/layout/PageContainer.vue'
 import BaseCard from '@/components/ui/base/BaseCard.vue'
 import PlaceStatsCard from '@/components/place/PlaceStatsCard.vue'
 import PlaceVisitsTable from '@/components/place/PlaceVisitsTable.vue'
+import ImmichLatestPhotosSection from '@/components/location-analytics/ImmichLatestPhotosSection.vue'
+import ImmichPhotosMapCard from '@/components/location-analytics/ImmichPhotosMapCard.vue'
+import { useImmichPhotoMapBridge } from '@/composables/useImmichPhotoMapBridge'
 
 import { useLocationAnalyticsStore } from '@/stores/locationAnalytics'
 
@@ -150,10 +172,38 @@ const error = ref(null)
 const visitsLoading = ref(false)
 const currentSortBy = ref('timestamp')
 const currentSortDirection = ref('desc')
+const countryPhotosSectionRef = ref(null)
+const countryPhotosMapRef = ref(null)
+const {
+  photosForMap: countryPhotosForMap,
+  resetPhotosForMap: resetCountryPhotosForMap,
+  handlePhotosChange: handleCountryPhotosChange,
+  handleMapPhotoClick: handleCountryMapPhotoClick,
+  handlePhotoShowOnMap: handleCountryPhotoShowOnMap
+} = useImmichPhotoMapBridge({
+  mapRef: countryPhotosMapRef,
+  photosSectionRef: countryPhotosSectionRef,
+  focusZoom: 12
+})
 
 const countryName = computed(() => route.params.name)
 const isLoading = computed(() => loading.value)
 const pagination = computed(() => countryPagination.value)
+const countryImmichSearchParams = computed(() => {
+  const firstVisit = countryDetails.value?.statistics?.firstVisit
+  const lastVisit = countryDetails.value?.statistics?.lastVisit
+  const country = countryDetails.value?.countryName
+
+  if (!firstVisit || !lastVisit || !country) {
+    return null
+  }
+
+  return {
+    startDate: firstVisit,
+    endDate: lastVisit,
+    country
+  }
+})
 
 const formatDuration = (seconds) => {
   const hours = Math.floor(seconds / 3600)
@@ -166,6 +216,7 @@ const formatDuration = (seconds) => {
 
 const loadCountryData = async () => {
   error.value = null
+  resetCountryPhotosForMap()
 
   try {
     await store.fetchCountryDetails(countryName.value)
@@ -272,6 +323,7 @@ watch(
   async (newName, oldName) => {
     if (newName !== oldName) {
       store.clearCountryData()
+      resetCountryPhotosForMap()
       await loadCountryData()
     }
   }
