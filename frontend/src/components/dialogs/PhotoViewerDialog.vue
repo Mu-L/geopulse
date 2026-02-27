@@ -3,15 +3,14 @@
     :visible="visible"
     modal
     :header="dialogTitle"
-    class="gp-dialog-xl"
+    class="gp-dialog-xl photo-viewer-dialog"
     :content-style="{ padding: '0' }"
     :dismissable-mask="true"
     @update:visible="(value) => emit('update:visible', value)"
     @hide="handleClose"
   >
     <div class="photo-viewer-content">
-      <!-- Photo Navigation -->
-      <div v-if="photos.length > 1" class="photo-navigation">
+      <div v-if="hasMultiplePhotos" class="photo-navigation">
         <Button
           icon="pi pi-chevron-left"
           @click="previousPhoto"
@@ -31,7 +30,6 @@
         />
       </div>
 
-      <!-- Main Photo Display -->
       <div class="photo-display">
         <img
           v-if="currentImageBlobUrl && !imageError"
@@ -41,32 +39,76 @@
           @load="handleImageLoad"
           @error="handleImageError"
         />
-        
-        <!-- Loading State -->
+
         <div v-if="imageLoading" class="image-loading">
           <ProgressSpinner size="50px" />
           <p>Loading photo...</p>
         </div>
-        
-        <!-- Error State -->
+
         <div v-if="imageError" class="image-error">
           <i class="pi pi-exclamation-triangle"></i>
           <p>Failed to load photo thumbnail</p>
         </div>
       </div>
 
-      <!-- Photo Details -->
+      <div v-if="hasMultiplePhotos" class="thumbnail-navigation">
+        <Button
+          icon="pi pi-chevron-left"
+          @click="scrollThumbnailRail(-1)"
+          class="thumbnail-scroll-button"
+          severity="secondary"
+          text
+        />
+
+        <div ref="thumbnailRailRef" class="thumbnail-rail">
+          <button
+            v-for="(photo, index) in photos"
+            :key="photo.id ?? index"
+            type="button"
+            class="thumbnail-tile"
+            :class="{ 'is-active': index === currentIndex }"
+            :data-photo-index="index"
+            :aria-label="`Show photo ${index + 1}`"
+            @click="selectPhoto(index)"
+          >
+            <img
+              v-if="getPhotoBlobUrl(photo.id)"
+              :src="getPhotoBlobUrl(photo.id)"
+              :alt="photo.originalFileName || `Photo ${index + 1}`"
+              class="thumbnail-image"
+            />
+            <div v-else class="thumbnail-placeholder">
+              <ProgressSpinner
+                v-if="isPhotoLoading(photo.id)"
+                stroke-width="8"
+                class="thumbnail-spinner"
+              />
+              <i v-else class="pi pi-image"></i>
+            </div>
+            <span class="thumbnail-index">{{ index + 1 }}</span>
+          </button>
+        </div>
+
+        <Button
+          icon="pi pi-chevron-right"
+          @click="scrollThumbnailRail(1)"
+          class="thumbnail-scroll-button"
+          severity="secondary"
+          text
+        />
+      </div>
+
       <div v-if="currentPhoto" class="photo-details">
         <div class="detail-row">
           <span class="detail-label">File:</span>
           <span class="detail-value">{{ currentPhoto.originalFileName }}</span>
         </div>
-        
+
         <div v-if="currentPhoto.takenAt" class="detail-row">
           <span class="detail-label">Date:</span>
           <span class="detail-value">{{ formatDate(currentPhoto.takenAt) }}</span>
         </div>
-        
+
         <div v-if="hasCoordinates" class="detail-row">
           <span class="detail-label">Location:</span>
           <span class="detail-value">{{ currentPhoto.latitude.toFixed(6) }}, {{ currentPhoto.longitude.toFixed(6) }}</span>
@@ -93,7 +135,7 @@
           severity="secondary"
           size="small"
         />
-        
+
         <Button
           label="Close"
           icon="pi pi-times"
@@ -139,26 +181,30 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'close', 'show-on-map'])
 const toast = useToast()
 
-// State
 const currentIndex = ref(0)
 const imageLoading = ref(false)
 const imageError = ref(false)
 const downloading = ref(false)
 const currentImageBlobUrl = ref(null)
-const imageLoadCache = ref(new Map()) // Cache for blob URLs
+const imageLoadCache = ref({})
+const imageLoadPromises = ref({})
+const loadingPhotoIds = ref(new Set())
+const currentPhotoLoadToken = ref(0)
+const thumbnailRailRef = ref(null)
+const thumbnailPreloadRunId = ref(0)
 
-// Computed
 const currentPhoto = computed(() => {
   return props.photos[currentIndex.value] || null
 })
+const hasMultiplePhotos = computed(() => props.photos.length > 1)
 
 const dialogTitle = computed(() => {
   if (!currentPhoto.value) return 'Photo Viewer'
-  
-  if (props.photos.length > 1) {
+
+  if (hasMultiplePhotos.value) {
     return `Photos (${currentIndex.value + 1}/${props.photos.length})`
   }
-  
+
   return currentPhoto.value.originalFileName || 'Photo'
 })
 
@@ -167,7 +213,13 @@ const hasCoordinates = computed(() => {
     typeof currentPhoto.value?.longitude === 'number'
 })
 
-// Methods
+const toSafeIndex = (index) => {
+  if (!Number.isInteger(index)) {
+    return 0
+  }
+  return Math.min(Math.max(0, index), Math.max(0, props.photos.length - 1))
+}
+
 const handleClose = () => {
   emit('update:visible', false)
   emit('close')
@@ -179,33 +231,170 @@ const resetState = () => {
   imageLoading.value = false
   imageError.value = false
   downloading.value = false
-  
-  // Clean up blob URLs
-  if (currentImageBlobUrl.value && currentImageBlobUrl.value.startsWith('blob:')) {
-    imageService.revokeBlobUrl(currentImageBlobUrl.value)
-  }
   currentImageBlobUrl.value = null
-  
-  // Clean up cache
-  imageLoadCache.value.forEach(blobUrl => {
+
+  Object.values(imageLoadCache.value).forEach((blobUrl) => {
     if (blobUrl && blobUrl.startsWith('blob:')) {
       imageService.revokeBlobUrl(blobUrl)
     }
   })
-  imageLoadCache.value.clear()
+  imageLoadCache.value = {}
+  imageLoadPromises.value = {}
+  loadingPhotoIds.value = new Set()
+  currentPhotoLoadToken.value = 0
+  thumbnailPreloadRunId.value += 1
+}
+
+const getPhotoBlobUrl = (photoId) => {
+  if (photoId === null || photoId === undefined) {
+    return null
+  }
+  return imageLoadCache.value[photoId] || null
+}
+
+const isPhotoLoading = (photoId) => {
+  if (photoId === null || photoId === undefined) {
+    return false
+  }
+  return loadingPhotoIds.value.has(photoId)
+}
+
+const markPhotoLoading = (photoId, isLoading) => {
+  const next = new Set(loadingPhotoIds.value)
+  if (isLoading) {
+    next.add(photoId)
+  } else {
+    next.delete(photoId)
+  }
+  loadingPhotoIds.value = next
+}
+
+const ensurePhotoLoaded = async (photo) => {
+  if ((photo?.id === null || photo?.id === undefined) || !photo.thumbnailUrl) {
+    return null
+  }
+
+  const photoId = photo.id
+  const cachedBlob = getPhotoBlobUrl(photoId)
+  if (cachedBlob) {
+    return cachedBlob
+  }
+
+  if (imageLoadPromises.value[photoId]) {
+    return imageLoadPromises.value[photoId]
+  }
+
+  const loadPromise = (async () => {
+    markPhotoLoading(photoId, true)
+    try {
+      const blobUrl = await imageService.loadAuthenticatedImage(photo.thumbnailUrl)
+      imageLoadCache.value = {
+        ...imageLoadCache.value,
+        [photoId]: blobUrl
+      }
+      return blobUrl
+    } catch (error) {
+      console.error('Failed to load photo thumbnail:', error)
+      return null
+    } finally {
+      markPhotoLoading(photoId, false)
+      const nextPromises = { ...imageLoadPromises.value }
+      delete nextPromises[photoId]
+      imageLoadPromises.value = nextPromises
+    }
+  })()
+
+  imageLoadPromises.value = {
+    ...imageLoadPromises.value,
+    [photoId]: loadPromise
+  }
+
+  return loadPromise
+}
+
+const preloadThumbnails = () => {
+  if (!props.visible || props.photos.length <= 1) {
+    return
+  }
+
+  const runId = ++thumbnailPreloadRunId.value
+  const photos = props.photos.slice()
+  const chunkSize = 12
+
+  const preloadChunk = (startIndex = 0) => {
+    if (runId !== thumbnailPreloadRunId.value || !props.visible) {
+      return
+    }
+
+    const endIndex = Math.min(startIndex + chunkSize, photos.length)
+    for (let index = startIndex; index < endIndex; index += 1) {
+      if (index !== currentIndex.value) {
+        ensurePhotoLoaded(photos[index])
+      }
+    }
+
+    if (endIndex < photos.length) {
+      window.setTimeout(() => preloadChunk(endIndex), 0)
+    }
+  }
+
+  preloadChunk(0)
+}
+
+const scrollActiveThumbnailIntoView = () => {
+  if (!hasMultiplePhotos.value) {
+    return
+  }
+
+  nextTick(() => {
+    const rail = thumbnailRailRef.value
+    if (!rail) {
+      return
+    }
+    const activeThumb = rail.querySelector(`[data-photo-index="${currentIndex.value}"]`)
+    if (!activeThumb) {
+      return
+    }
+    activeThumb.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center'
+    })
+  })
+}
+
+const scrollThumbnailRail = (direction) => {
+  const rail = thumbnailRailRef.value
+  if (!rail) {
+    return
+  }
+  const step = Math.max(rail.clientWidth * 0.75, 240)
+  rail.scrollBy({
+    left: direction * step,
+    behavior: 'smooth'
+  })
+}
+
+const selectPhoto = (index) => {
+  const safeIndex = toSafeIndex(index)
+  if (safeIndex === currentIndex.value) {
+    scrollActiveThumbnailIntoView()
+    return
+  }
+
+  currentIndex.value = safeIndex
+  resetImageState()
 }
 
 const previousPhoto = () => {
   if (currentIndex.value > 0) {
-    currentIndex.value--
-    resetImageState()
+    selectPhoto(currentIndex.value - 1)
   }
 }
 
 const nextPhoto = () => {
   if (currentIndex.value < props.photos.length - 1) {
-    currentIndex.value++
-    resetImageState()
+    selectPhoto(currentIndex.value + 1)
   }
 }
 
@@ -216,40 +405,45 @@ const resetImageState = () => {
 }
 
 const loadCurrentPhoto = async () => {
-  if (!currentPhoto.value) return
-  
-  const photo = currentPhoto.value
-  const cacheKey = photo.id
-  
-  // Check cache first
-  if (imageLoadCache.value.has(cacheKey)) {
-    currentImageBlobUrl.value = imageLoadCache.value.get(cacheKey)
+  if (!currentPhoto.value) {
+    currentImageBlobUrl.value = null
     imageLoading.value = false
     imageError.value = false
     return
   }
-  
-  imageLoading.value = true
-  imageError.value = false
-  
-  try {
-    // Use imageService for authenticated requests (avoids CORS issues)
-    const imageUrl = photo.thumbnailUrl
-    
-    if (!imageUrl) {
-      throw new Error('No thumbnail URL available')
-    }
-    
-    const blobUrl = await imageService.loadAuthenticatedImage(imageUrl)
-    
-    // Cache the blob URL
-    imageLoadCache.value.set(cacheKey, blobUrl)
-    currentImageBlobUrl.value = blobUrl
-    
+
+  const photo = currentPhoto.value
+  const loadToken = ++currentPhotoLoadToken.value
+
+  const cachedBlob = getPhotoBlobUrl(photo.id)
+  if (cachedBlob) {
+    currentImageBlobUrl.value = cachedBlob
     imageLoading.value = false
     imageError.value = false
-  } catch (error) {
-    console.error('Failed to load photo thumbnail:', error)
+    return
+  }
+
+  if (!photo.thumbnailUrl) {
+    imageLoading.value = false
+    imageError.value = true
+    currentImageBlobUrl.value = null
+    return
+  }
+
+  imageLoading.value = true
+  imageError.value = false
+  currentImageBlobUrl.value = null
+
+  const loadedBlob = await ensurePhotoLoaded(photo)
+  if (loadToken !== currentPhotoLoadToken.value) {
+    return
+  }
+
+  if (loadedBlob) {
+    currentImageBlobUrl.value = loadedBlob
+    imageLoading.value = false
+    imageError.value = false
+  } else {
     imageLoading.value = false
     imageError.value = true
   }
@@ -308,7 +502,7 @@ const downloadPhoto = async () => {
 
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  
+
   try {
     return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
   } catch (error) {
@@ -319,7 +513,7 @@ const formatDate = (dateString) => {
 // Keyboard navigation
 const handleKeydown = (event) => {
   if (!props.visible) return
-  
+
   switch (event.key) {
     case 'ArrowLeft':
       event.preventDefault()
@@ -336,41 +530,60 @@ const handleKeydown = (event) => {
   }
 }
 
-// Watch for dialog visibility changes
 watch(() => props.visible, (newVisible) => {
   if (newVisible) {
-    currentIndex.value = Math.max(0, props.initialPhotoIndex || 0)
+    currentIndex.value = toSafeIndex(props.initialPhotoIndex || 0)
     resetImageState()
     loadCurrentPhoto()
-    
-    // Add keyboard listener
+    preloadThumbnails()
+    scrollActiveThumbnailIntoView()
+
     nextTick(() => {
       window.addEventListener('keydown', handleKeydown)
     })
   } else {
-    // Remove keyboard listener
     window.removeEventListener('keydown', handleKeydown)
   }
 })
 
-// Watch for photo changes to trigger loading
 watch(() => currentPhoto.value, () => {
-  if (currentPhoto.value) {
-    loadCurrentPhoto()
+  if (!props.visible || !currentPhoto.value) {
+    return
   }
+
+  loadCurrentPhoto()
+  scrollActiveThumbnailIntoView()
 })
 
-// Watch for initial photo index changes
 watch(() => props.initialPhotoIndex, (newIndex) => {
   if (props.visible && newIndex >= 0 && newIndex < props.photos.length) {
-    currentIndex.value = newIndex
+    currentIndex.value = toSafeIndex(newIndex)
     resetImageState()
     loadCurrentPhoto()
+    preloadThumbnails()
+    scrollActiveThumbnailIntoView()
   }
 })
 
-// Cleanup on unmount
+watch(() => props.photos.length, (newLength) => {
+  if (newLength <= 0) {
+    currentIndex.value = 0
+    resetImageState()
+    return
+  }
+
+  if (currentIndex.value > newLength - 1) {
+    currentIndex.value = newLength - 1
+    resetImageState()
+  }
+
+  if (props.visible) {
+    preloadThumbnails()
+  }
+})
+
 onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
   resetState()
 })
 </script>
@@ -379,14 +592,14 @@ onUnmounted(() => {
 .photo-viewer-content {
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
+  max-height: calc(90vh - 3.2rem);
 }
 
 .photo-navigation {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 0.45rem 0.75rem;
   border-bottom: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
   background: var(--gp-surface-light, #f8fafc);
 }
@@ -405,8 +618,8 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 400px;
-  max-height: 60vh;
+  min-height: 260px;
+  max-height: 48vh;
   overflow: hidden;
   background: var(--gp-surface-light, #f8fafc);
 }
@@ -416,6 +629,91 @@ onUnmounted(() => {
   max-height: 100%;
   object-fit: contain;
   border-radius: 4px;
+}
+
+.thumbnail-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
+  border-bottom: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
+  background: var(--gp-surface-white, white);
+}
+
+.thumbnail-scroll-button {
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.thumbnail-rail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  overflow-x: auto;
+  padding: 0.2rem 0.1rem;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+}
+
+.thumbnail-tile {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
+  border-radius: var(--gp-radius-medium, 8px);
+  background: var(--gp-surface-white, white);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.thumbnail-tile:hover {
+  border-color: var(--gp-primary, #3b82f6);
+  transform: translateY(-1px);
+}
+
+.thumbnail-tile.is-active {
+  border-color: var(--gp-primary, #3b82f6);
+  box-shadow: 0 0 0 1px var(--gp-primary, #3b82f6);
+}
+
+.thumbnail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbnail-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gp-text-secondary, #64748b);
+  background: var(--gp-surface-light, #f8fafc);
+}
+
+.thumbnail-spinner {
+  width: 20px;
+  height: 20px;
+}
+
+.thumbnail-index {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.78);
+  color: #fff;
 }
 
 .image-loading,
@@ -441,7 +739,7 @@ onUnmounted(() => {
 }
 
 .photo-details {
-  padding: 1rem;
+  padding: 0.75rem;
   border-bottom: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
   background: var(--gp-surface-white, white);
 }
@@ -472,11 +770,19 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  padding: 1rem;
+  padding: 0.75rem;
   background: var(--gp-surface-light, #f8fafc);
 }
 
-/* Dark theme */
+:deep(.photo-viewer-dialog .p-dialog-header) {
+  padding: 0.65rem 1rem;
+}
+
+:deep(.photo-viewer-dialog .p-dialog-header .p-dialog-title) {
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+
 .p-dark .photo-navigation,
 .p-dark .photo-actions {
   background: var(--gp-surface-dark, #1e293b) !important;
@@ -490,6 +796,21 @@ onUnmounted(() => {
 .p-dark .photo-details {
   background: var(--gp-surface-dark, #1e293b) !important;
   border-color: var(--gp-border-dark, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.p-dark .thumbnail-navigation {
+  background: var(--gp-surface-dark, #1e293b) !important;
+  border-color: var(--gp-border-dark, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.p-dark .thumbnail-tile {
+  background: var(--gp-surface-dark, #1e293b) !important;
+  border-color: var(--gp-border-dark, rgba(255, 255, 255, 0.1)) !important;
+}
+
+.p-dark .thumbnail-placeholder {
+  background: var(--gp-surface-darker, #0b1120) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 .p-dark .photo-counter {
@@ -509,23 +830,40 @@ onUnmounted(() => {
   color: rgba(255, 255, 255, 0.8) !important;
 }
 
-/* Mobile responsive */
 @media (max-width: 768px) {
   .photo-viewer-content {
-    max-height: 90vh;
+    max-height: calc(92vh - 2.7rem);
   }
   
   .photo-navigation {
-    padding: 0.75rem;
+    padding: 0.35rem 0.55rem;
   }
   
   .photo-display {
-    min-height: 300px;
-    max-height: 50vh;
+    min-height: 220px;
+    max-height: 40vh;
+  }
+
+  .thumbnail-navigation {
+    padding: 0.5rem 0.75rem;
+    gap: 0.35rem;
+  }
+
+  .thumbnail-scroll-button {
+    min-width: 32px;
+  }
+
+  .thumbnail-rail {
+    gap: 0.35rem;
+  }
+
+  .thumbnail-tile {
+    width: 68px;
+    height: 68px;
   }
   
   .photo-details {
-    padding: 0.75rem;
+    padding: 0.6rem;
   }
   
   .detail-row {
@@ -540,8 +878,16 @@ onUnmounted(() => {
   }
   
   .photo-actions {
-    padding: 0.75rem;
+    padding: 0.6rem;
     flex-wrap: wrap;
+  }
+
+  :deep(.photo-viewer-dialog .p-dialog-header) {
+    padding: 0.5rem 0.75rem;
+  }
+
+  :deep(.photo-viewer-dialog .p-dialog-header .p-dialog-title) {
+    font-size: 1.05rem;
   }
 }
 </style>

@@ -170,13 +170,15 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onMounted, readonly, ref, watch} from 'vue'
+import {computed, nextTick, onMounted, onUnmounted, readonly, ref, watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
 import ContextMenu from 'primevue/contextmenu'
 import ConfirmDialog from 'primevue/confirmdialog'
 import {useTimelineRegeneration} from '@/composables/useTimelineRegeneration'
+import { usePhotoMapMarkers } from '@/composables/usePhotoMapMarkers'
+import '@/styles/photo-map-markers.css'
 
 // Map components
 import {FavoritesLayer, HeatmapLayer, MapContainer, MapControls, PathLayer, TimelineLayer, CurrentLocationLayer, ImmichLayer} from '@/components/maps'
@@ -344,6 +346,11 @@ const {
   }
 })
 
+const {
+  clearFocusMarker: clearFocusedPhotoMarker,
+  focusOnPhoto: focusOnMapPhoto
+} = usePhotoMapMarkers()
+
 // Photo viewer state
 const photoViewerVisible = ref(false)
 const photoViewerPhotos = ref([])
@@ -484,6 +491,7 @@ const handleMapClick = (event) => {
   
   // Clear all highlights when clicking on empty map
   clearAllMapHighlights()
+  clearFocusedPhotoMarker()
 }
 
 const handleMapContextMenu = (event) => {
@@ -574,7 +582,7 @@ const handlePhotoShowOnMap = (photo) => {
   }
 
   const targetZoom = Math.max(map.value.getZoom?.() || 0, 16)
-  map.value.setView([photo.latitude, photo.longitude], targetZoom, { animate: true })
+  focusOnMapPhoto(map.value, photo, targetZoom)
 }
 
 const focusOnPhoto = (photo) => {
@@ -1035,6 +1043,10 @@ watch(
 // Lifecycle
 onMounted(() => {
   // Any additional initialization
+})
+
+onUnmounted(() => {
+  clearFocusedPhotoMarker()
 })
 
 // Expose methods for parent component
