@@ -282,6 +282,7 @@ const citiesLoaded = ref(false)
 const countriesLoaded = ref(false)
 const selectedMapPlace = ref(null)
 const lastMapRequestKey = ref('')
+const currentMapViewport = ref(null)
 const mapPlacesRailRef = ref(null)
 const canScrollRailLeft = ref(false)
 const canScrollRailRight = ref(false)
@@ -300,9 +301,42 @@ const selectedMapPlaceKey = computed(() => {
   return getPlaceKey(selectedMapPlace.value)
 })
 
+const normalizeLongitude = (longitude) => ((longitude + 180) % 360 + 360) % 360 - 180
+
+const isLongitudeInViewport = (longitude, minLon, maxLon) => {
+  if (![longitude, minLon, maxLon].every(Number.isFinite)) return false
+  const span = maxLon - minLon
+  if (span >= 360) return true
+
+  const normalizedLongitude = normalizeLongitude(longitude)
+  const normalizedMinLon = normalizeLongitude(minLon)
+  const normalizedMaxLon = normalizeLongitude(maxLon)
+
+  if (normalizedMinLon <= normalizedMaxLon) {
+    return normalizedLongitude >= normalizedMinLon && normalizedLongitude <= normalizedMaxLon
+  }
+  return normalizedLongitude >= normalizedMinLon || normalizedLongitude <= normalizedMaxLon
+}
+
+const isPlaceInViewport = (place, viewport) => {
+  if (!viewport) return true
+  if (typeof place?.latitude !== 'number' || typeof place?.longitude !== 'number') return false
+
+  const { minLat, maxLat, minLon, maxLon } = viewport
+  if (![minLat, maxLat, minLon, maxLon].every(Number.isFinite)) return true
+  if (place.latitude < minLat || place.latitude > maxLat) return false
+
+  return isLongitudeInViewport(place.longitude, minLon, maxLon)
+}
+
+const visibleMapPlaces = computed(() => {
+  if (!Array.isArray(mapPlaces.value) || mapPlaces.value.length === 0) return []
+  return mapPlaces.value.filter((place) => isPlaceInViewport(place, currentMapViewport.value))
+})
+
 const sortedMapPlaces = computed(() => {
-  if (!mapPlaces.value || mapPlaces.value.length === 0) return []
-  return [...mapPlaces.value].sort((a, b) => {
+  if (visibleMapPlaces.value.length === 0) return []
+  return [...visibleMapPlaces.value].sort((a, b) => {
     const aTime = a.lastVisit ? new Date(a.lastVisit).getTime() : 0
     const bTime = b.lastVisit ? new Date(b.lastVisit).getTime() : 0
     return bTime - aTime
@@ -393,12 +427,6 @@ const scrollPlacesRail = (direction) => {
   })
 }
 
-const buildViewportKey = (viewport) => {
-  if (!viewport) return 'all'
-  const round = (value) => (typeof value === 'number' ? value.toFixed(4) : 'x')
-  return `${round(viewport.minLat)}:${round(viewport.maxLat)}:${round(viewport.minLon)}:${round(viewport.maxLon)}:${round(viewport.zoom)}`
-}
-
 const loadCities = async () => {
   if (citiesLoaded.value || citiesLoading.value) return
   await store.fetchAllCities()
@@ -441,8 +469,8 @@ const prefetchTabCounts = async () => {
   }
 }
 
-const fetchMapPlaces = async (viewport, force = false) => {
-  const requestKey = buildViewportKey(viewport)
+const fetchMapPlaces = async (force = false) => {
+  const requestKey = 'all'
   if (!force && requestKey === lastMapRequestKey.value) {
     return
   }
@@ -452,13 +480,6 @@ const fetchMapPlaces = async (viewport, force = false) => {
     const params = {
       minVisits: 1,
       limit: 5000
-    }
-
-    if (viewport) {
-      params.minLat = viewport.minLat
-      params.maxLat = viewport.maxLat
-      params.minLon = viewport.minLon
-      params.maxLon = viewport.maxLon
     }
 
     await store.fetchMapPlaces(params)
@@ -527,12 +548,25 @@ const loadMapPlacePeriodTags = async (places) => {
 }
 
 const handleMapViewportChange = (viewport) => {
+  currentMapViewport.value = viewport
+
+  if (lastMapRequestKey.value === 'all') {
+    if (selectedMapPlace.value) {
+      const selectedKey = getPlaceKey(selectedMapPlace.value)
+      const exists = sortedMapPlaces.value.some((place) => getPlaceKey(place) === selectedKey)
+      if (!exists) {
+        selectedMapPlace.value = null
+      }
+    }
+    return
+  }
+
   if (mapFetchTimer) {
     clearTimeout(mapFetchTimer)
   }
 
   mapFetchTimer = setTimeout(() => {
-    fetchMapPlaces(viewport)
+    fetchMapPlaces()
   }, 240)
 }
 
