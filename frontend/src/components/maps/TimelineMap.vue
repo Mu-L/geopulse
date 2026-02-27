@@ -346,10 +346,28 @@ const {
   }
 })
 
+const openPhotoViewerFromPayload = (payload) => {
+  const photos = Array.isArray(payload?.photos) ? payload.photos : []
+  if (photos.length === 0) {
+    return
+  }
+
+  const safeIndex = Math.min(Math.max(0, payload?.initialIndex || 0), photos.length - 1)
+  photoViewerPhotos.value = photos
+  photoViewerIndex.value = safeIndex
+  photoViewerVisible.value = true
+}
+
 const {
   clearFocusMarker: clearFocusedPhotoMarker,
   focusOnPhoto: focusOnMapPhoto
-} = usePhotoMapMarkers()
+} = usePhotoMapMarkers({
+  emit: (eventName, payload) => {
+    if (eventName === 'photo-click') {
+      openPhotoViewerFromPayload(payload)
+    }
+  }
+})
 
 // Photo viewer state
 const photoViewerVisible = ref(false)
@@ -566,10 +584,7 @@ const handleFavoriteClick = (event) => {
 
 // Immich layer event handlers
 const handlePhotoClick = (event) => {
-  // Always open PhotoViewerDialog for consistent experience
-  photoViewerPhotos.value = event.photos || []
-  photoViewerIndex.value = event.initialIndex || 0
-  photoViewerVisible.value = true
+  openPhotoViewerFromPayload(event)
 }
 
 const handlePhotoHover = (event) => {

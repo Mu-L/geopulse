@@ -99,19 +99,30 @@
       </div>
 
       <div v-if="currentPhoto" class="photo-details">
-        <div class="detail-row">
-          <span class="detail-label">File:</span>
-          <span class="detail-value">{{ currentPhoto.originalFileName }}</span>
+        <div class="photo-details-desktop">
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">{{ currentPhoto.originalFileName }}</span>
+          </div>
+
+          <div v-if="currentPhoto.takenAt" class="detail-row">
+            <span class="detail-label">Date:</span>
+            <span class="detail-value">{{ formatDate(currentPhoto.takenAt) }}</span>
+          </div>
+
+          <div v-if="hasCoordinates" class="detail-row">
+            <span class="detail-label">Location:</span>
+            <span class="detail-value">{{ currentPhoto.latitude.toFixed(6) }}, {{ currentPhoto.longitude.toFixed(6) }}</span>
+          </div>
         </div>
 
-        <div v-if="currentPhoto.takenAt" class="detail-row">
-          <span class="detail-label">Date:</span>
-          <span class="detail-value">{{ formatDate(currentPhoto.takenAt) }}</span>
-        </div>
-
-        <div v-if="hasCoordinates" class="detail-row">
-          <span class="detail-label">Location:</span>
-          <span class="detail-value">{{ currentPhoto.latitude.toFixed(6) }}, {{ currentPhoto.longitude.toFixed(6) }}</span>
+        <div v-if="currentPhoto.takenAt || hasCoordinates" class="photo-details-mobile">
+          <span v-if="currentPhoto.takenAt" class="detail-chip">
+            {{ formatCompactDate(currentPhoto.takenAt) }}
+          </span>
+          <span v-if="hasCoordinates" class="detail-chip">
+            {{ compactCoordinates }}
+          </span>
         </div>
       </div>
 
@@ -510,6 +521,23 @@ const formatDate = (dateString) => {
   }
 }
 
+const formatCompactDate = (dateString) => {
+  if (!dateString) return ''
+
+  try {
+    return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm')}`
+  } catch (error) {
+    return dateString
+  }
+}
+
+const compactCoordinates = computed(() => {
+  if (!hasCoordinates.value || !currentPhoto.value) {
+    return ''
+  }
+  return `${currentPhoto.value.latitude.toFixed(4)}, ${currentPhoto.value.longitude.toFixed(4)}`
+})
+
 // Keyboard navigation
 const handleKeydown = (event) => {
   if (!props.visible) return
@@ -744,6 +772,10 @@ onUnmounted(() => {
   background: var(--gp-surface-white, white);
 }
 
+.photo-details-mobile {
+  display: none;
+}
+
 .detail-row {
   display: flex;
   margin-bottom: 0.5rem;
@@ -771,6 +803,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 0.5rem;
   padding: 0.75rem;
+  border-top: 1px solid var(--gp-border-light, rgba(0, 0, 0, 0.1));
   background: var(--gp-surface-light, #f8fafc);
 }
 
@@ -832,38 +865,66 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .photo-viewer-content {
-    max-height: calc(92vh - 2.7rem);
+    max-height: calc(100dvh - 7.2rem);
+    overflow: hidden;
   }
   
   .photo-navigation {
-    padding: 0.35rem 0.55rem;
+    padding: 0.25rem 0.45rem;
   }
   
   .photo-display {
-    min-height: 220px;
-    max-height: 40vh;
+    min-height: 240px;
+    max-height: 42dvh;
   }
 
   .thumbnail-navigation {
-    padding: 0.5rem 0.75rem;
-    gap: 0.35rem;
+    padding: 0.35rem 0.45rem;
+    gap: 0.2rem;
   }
 
   .thumbnail-scroll-button {
-    min-width: 32px;
+    min-width: 26px;
+    padding: 0.2rem;
   }
 
   .thumbnail-rail {
-    gap: 0.35rem;
+    gap: 0.25rem;
+    padding: 0.1rem 0;
   }
 
   .thumbnail-tile {
-    width: 68px;
-    height: 68px;
+    width: 50px;
+    height: 50px;
   }
   
   .photo-details {
-    padding: 0.6rem;
+    padding: 0.35rem 0.45rem;
+  }
+
+  .photo-details-desktop {
+    display: none;
+  }
+
+  .photo-details-mobile {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .detail-chip {
+    max-width: 100%;
+    display: inline-block;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    border-radius: 999px;
+    padding: 0.2rem 0.5rem;
+    color: var(--gp-text-secondary, #64748b);
+    background: var(--gp-surface-light, #f8fafc);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .detail-row {
@@ -878,8 +939,20 @@ onUnmounted(() => {
   }
   
   .photo-actions {
-    padding: 0.6rem;
-    flex-wrap: wrap;
+    padding: 0.45rem;
+    flex-wrap: nowrap;
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    justify-content: space-between;
+    gap: 0.35rem;
+  }
+
+  .photo-actions :deep(.p-button) {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    padding-inline: 0.35rem;
   }
 
   :deep(.photo-viewer-dialog .p-dialog-header) {
