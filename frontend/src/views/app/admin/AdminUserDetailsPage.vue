@@ -225,7 +225,8 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const authStore = useAuthStore()
-const { timeAgo } = useTimezone()
+const timezone = useTimezone()
+const { timeAgo } = timezone
 
 const breadcrumbHome = ref({
   icon: 'pi pi-home',
@@ -402,7 +403,7 @@ const deleteUser = async () => {
 
 const formatDateTime = (dateStr) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString()
+  return `${timezone.formatDateDisplay(dateStr)} ${timezone.format(dateStr, 'HH:mm:ss')}`
 }
 
 const formatNumber = (num) => {

@@ -210,6 +210,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTimelineJobProgress } from '@/composables/useTimelineJobProgress'
+import { useTimezone } from '@/composables/useTimezone'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
 import PageContainer from '@/components/ui/layout/PageContainer.vue'
 import Card from 'primevue/card'
@@ -221,6 +222,7 @@ import Tag from 'primevue/tag'
 
 const route = useRoute()
 const router = useRouter()
+const timezone = useTimezone()
 
 const jobId = computed(() => route.params.jobId)
 
@@ -331,7 +333,7 @@ const isCurrentStep = (stepIndex) => {
 
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return 'N/A'
-  return new Date(timestamp).toLocaleString()
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
 }
 
 const formatDuration = (durationMs) => {

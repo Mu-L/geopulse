@@ -227,6 +227,18 @@ public class UserService {
         }
     }
 
+    private String validateDateFormat(String dateFormat) {
+        if (dateFormat == null || dateFormat.trim().isEmpty()) {
+            return null;
+        }
+
+        String normalized = dateFormat.trim().toUpperCase();
+        return switch (normalized) {
+            case "MDY", "DMY", "YMD" -> normalized;
+            default -> throw new IllegalArgumentException("Invalid date format. Allowed values: MDY, DMY, YMD");
+        };
+    }
+
     /**
      * Validates custom map tile URL to ensure it's a safe and valid tile URL.
      * Must contain {z}, {x}, {y} placeholders and use HTTP/HTTPS protocols.
@@ -372,6 +384,11 @@ public class UserService {
             validateDefaultRedirectUrl(request.getDefaultRedirectUrl());
             user.setDefaultRedirectUrl(request.getDefaultRedirectUrl().trim().isEmpty() ? null : request.getDefaultRedirectUrl().trim());
             log.debug("Updated default redirect URL for user {}", user.getId());
+        }
+
+        if (request.getDateFormat() != null) {
+            user.setDateFormat(validateDateFormat(request.getDateFormat()));
+            log.debug("Updated date format for user {}", user.getId());
         }
 
         return user;

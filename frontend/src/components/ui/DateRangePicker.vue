@@ -13,7 +13,7 @@
           :showIcon="showIcon"
           :showOnFocus="true"
           :showWeek="false"
-          dateFormat="mm/dd/yy"
+          :dateFormat="primeVueDatePickerFormat"
           :maxDate="maxDate"
           :placeholder="placeholder"
       >
@@ -43,7 +43,7 @@
         :showIcon="showIcon"
         :showOnFocus="true"
         :showWeek="false"
-        dateFormat="mm/dd/yy"
+        :dateFormat="primeVueDatePickerFormat"
         :maxDate="maxDate"
         :placeholder="placeholder"
     >
@@ -146,6 +146,7 @@ const selectedPreset = ref()
 const validationMessage = ref('')
 
 const variantClass = computed(() => `date-range-picker--${props.variant}`)
+const primeVueDatePickerFormat = computed(() => timezone.getPrimeVueDatePickerFormat())
 
 const maxDate = computed(() => new Date())
 const periodPresetPrefix = 'period:'

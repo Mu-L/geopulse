@@ -80,7 +80,10 @@ public class ImmichResource {
             @QueryParam("endDate") String endDateStr,
             @QueryParam("latitude") Double latitude,
             @QueryParam("longitude") Double longitude,
-            @QueryParam("radiusMeters") Double radiusMeters) {
+            @QueryParam("radiusMeters") Double radiusMeters,
+            @QueryParam("city") String city,
+            @QueryParam("country") String country,
+            @QueryParam("limit") Integer limit) {
         
         UUID userId = parseUserId(userIdStr);
         validateUserAccess(userId);
@@ -92,6 +95,9 @@ public class ImmichResource {
             searchRequest.setLatitude(latitude);
             searchRequest.setLongitude(longitude);
             searchRequest.setRadiusMeters(radiusMeters);
+            searchRequest.setCity(city);
+            searchRequest.setCountry(country);
+            searchRequest.setLimit(limit);
 
             return immichService.searchPhotos(userId, searchRequest)
                     .thenApply(result -> Response.ok(ApiResponse.success(result)).build())
@@ -216,10 +222,13 @@ public class ImmichResource {
             @QueryParam("endDate") String endDateStr,
             @QueryParam("latitude") Double latitude,
             @QueryParam("longitude") Double longitude,
-            @QueryParam("radiusMeters") Double radiusMeters) {
+            @QueryParam("radiusMeters") Double radiusMeters,
+            @QueryParam("city") String city,
+            @QueryParam("country") String country,
+            @QueryParam("limit") Integer limit) {
         
         UUID userId = currentUserService.getCurrentUserId();
-        return searchPhotos(userId.toString(), startDateStr, endDateStr, latitude, longitude, radiusMeters);
+        return searchPhotos(userId.toString(), startDateStr, endDateStr, latitude, longitude, radiusMeters, city, country, limit);
     }
 
     @GET

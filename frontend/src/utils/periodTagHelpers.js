@@ -1,4 +1,13 @@
+import { useTimezone } from '@/composables/useTimezone'
+
 const FALLBACK_TAG_COLOR = '#0ea5e9'
+const timezone = useTimezone()
+
+const formatDateForTimelineQuery = (dateValue) => {
+  const timestamp = toEpochMs(dateValue)
+  if (timestamp === null) return null
+  return timezone.formatUrlDate(new Date(timestamp).toISOString())
+}
 
 const toEpochMs = (value) => {
   if (!value) return null
@@ -40,17 +49,6 @@ const selectBestTag = (matchingTags) => {
 export const normalizePeriodTagColor = (color) => {
   if (!color || typeof color !== 'string') return FALLBACK_TAG_COLOR
   return color.startsWith('#') ? color : `#${color}`
-}
-
-const formatDateForTimelineQuery = (dateValue) => {
-  const timestamp = toEpochMs(dateValue)
-  if (timestamp === null) return null
-
-  const date = new Date(timestamp)
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${month}/${day}/${year}`
 }
 
 export const buildTimelineQueryForPeriodTag = (tag) => {

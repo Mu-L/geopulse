@@ -14,7 +14,7 @@
         />
         <span class="user-name">{{ userName }}</span>
       </div>
-      <span class="relative-time">{{ timezone.format(props.item.timestamp) }}</span>
+      <span class="relative-time">{{ formattedTimestamp }}</span>
     </div>
 
     <div class="card-subtitle">
@@ -63,6 +63,12 @@ const timezone = useTimezone()
 const cardClass = computed(() => ({
   [`friend-timeline-card--${props.variant}`]: props.variant !== 'default'
 }))
+
+const formattedTimestamp = computed(() => {
+  const timestamp = props.item?.timestamp || props.item?.startTime
+  if (!timestamp) return ''
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.formatTime(timestamp)}`
+})
 
 const handleClick = () => {
   emit('click', props.item)

@@ -4,8 +4,34 @@ import {TimelineMapPage} from '../pages/TimelineMapPage.js';
 import {TestData} from '../fixtures/test-data.js';
 import * as TimelineTestData from '../utils/timeline-test-data.js';
 import * as MapTestData from '../utils/map-test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Timeline Map Interactions', () => {
+  test('should display timeline marker popup timestamps using user date format', async ({page, dbManager}) => {
+    const timelinePage = new TimelinePage(page);
+    const mapPage = new TimelineMapPage(page);
+    const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+
+    await timelinePage.setupTimelineWithData(dbManager, TimelineTestData.insertRegularStaysTestData, testUser, {
+      startDate: new Date('2025-09-21'),
+      endDate: new Date('2025-09-21')
+    });
+
+    await mapPage.waitForMapReady();
+    const firstStayCard = timelinePage.getTimelineCards('stays').first();
+    await expect(firstStayCard).toBeVisible();
+    await firstStayCard.click();
+
+    const popupContent = page.locator('.leaflet-popup-content').first();
+    await expect(popupContent).toBeVisible({ timeout: 15000 });
+
+    const popupText = await popupContent.textContent();
+    DateFormatTestHelper.expectContainsDate(
+      popupText,
+      KnownDateStrings.sep21_2025.DMY,
+      KnownDateStrings.sep21_2025.MDY
+    );
+  });
 
   test.describe('Context Menus', () => {
     test('should show map context menu on right click', async ({page, dbManager}) => {

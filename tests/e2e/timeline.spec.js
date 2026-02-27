@@ -4,6 +4,7 @@ import {TestData} from '../fixtures/test-data.js';
 import {TestSetupHelper} from '../utils/test-setup-helper.js';
 import {TestDates} from '../fixtures/test-dates.js';
 import * as TimelineTestData from '../utils/timeline-test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Timeline Page', () => {
 
@@ -142,6 +143,8 @@ test.describe('Timeline Page', () => {
 
       // Wait for redirect to complete (should add query params)
       await page.waitForURL(/\/app\/timeline\?start=.*&end=.*/);
+      expect(page.url()).toMatch(/start=\d{4}-\d{2}-\d{2}/);
+      expect(page.url()).toMatch(/end=\d{4}-\d{2}-\d{2}/);
 
       // Wait for the page to load completely
       await timelinePage.waitForPageLoad();
@@ -209,6 +212,36 @@ test.describe('Timeline Page', () => {
   });
 
   test.describe('Timeline with Data', () => {
+    test('should display timeline date range and card timestamps using user date format', async ({page, dbManager}) => {
+      const timelinePage = new TimelinePage(page);
+      const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+
+      await timelinePage.setupTimelineWithData(
+        dbManager,
+        TimelineTestData.insertVerifiableStaysTestData,
+        testUser,
+        testDateRange
+      );
+
+      await timelinePage.waitForTimelineContent();
+
+      const dateRangeInput = page.locator('.date-range-picker .p-datepicker-input').first();
+      const dateRangeValue = await dateRangeInput.inputValue();
+      DateFormatTestHelper.expectContainsDate(
+        dateRangeValue,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
+
+      const firstStayCard = timelinePage.getTimelineCards('stays').first();
+      const stayCardText = await firstStayCard.textContent();
+      DateFormatTestHelper.expectContainsDate(
+        stayCardText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
+    });
+
     test('should display Movement Timeline header', async ({page, dbManager}) => {
       const timelinePage = new TimelinePage(page);
       await timelinePage.setupTimelineWithData(dbManager, TimelineTestData.insertRegularStaysTestData, TestData.users.existing, testDateRange);

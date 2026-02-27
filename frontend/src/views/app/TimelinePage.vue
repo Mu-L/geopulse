@@ -45,6 +45,7 @@
             :dateRange="dateRange"
             @timeline-item-click="handleTimelineItemClick"
             @tag-clicked="handleTagClicked"
+            @photo-show-on-map="handleTimelinePhotoShowOnMap"
         />
           </div>
         </div>
@@ -144,6 +145,7 @@ const currentLocation = ref(null)
 const geolocationError = ref(null)
 const isFetching = ref(false) // Flag to prevent concurrent fetches
 const pendingFetchKey = ref(null) // Track the currently pending fetch
+const queuedFetchRange = ref(null) // Keep latest requested range while a fetch is running
 
 // Large dataset warning state
 const showLargeDatasetWarning = ref(false)
@@ -365,6 +367,61 @@ const handleTagClicked = (tag) => {
   })
 }
 
+const handleTimelinePhotoShowOnMap = (photo) => {
+  mapViewRef.value?.focusOnPhoto?.(photo)
+}
+
+const queueLatestFetchRange = (startDate, endDate, rangeKey) => {
+  queuedFetchRange.value = { startDate, endDate, rangeKey }
+  console.info('Fetch in progress, queued latest range:', rangeKey)
+}
+
+const executeFetchForRange = async (startDate, endDate, rangeKey) => {
+  if (isFetching.value) {
+    queueLatestFetchRange(startDate, endDate, rangeKey)
+    return
+  }
+
+  // Mark as fetching and set the range before starting async operation
+  isFetching.value = true
+  pendingFetchKey.value = rangeKey
+  lastFetchedRange.value = rangeKey
+
+  try {
+    // Clear stale map/timeline highlights immediately on date-range change.
+    // Otherwise the previously selected trip path can remain visible while the
+    // new range loads, which is confusing UX.
+    lastHighlightedPath.value = null
+    highlightStore.clearAllHighlights()
+
+    const shouldProceed = await checkDatasetSize(startDate, endDate)
+
+    if (!shouldProceed) {
+      mapDataLoading.value = false
+      timelineDataLoading.value = false
+      return
+    }
+
+    forceLoadLargeDataset.value = false
+
+    await Promise.all([
+      fetchLocationData(startDate, endDate),
+      fetchTimelineData(startDate, endDate),
+    ])
+  } finally {
+    isFetching.value = false
+    pendingFetchKey.value = null
+
+    // Always run the latest queued range (if any) after the current fetch
+    // completes so route/date changes are never lost.
+    const queued = queuedFetchRange.value
+    queuedFetchRange.value = null
+    if (queued && queued.rangeKey !== rangeKey) {
+      await executeFetchForRange(queued.startDate, queued.endDate, queued.rangeKey)
+    }
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   await favoritesStore.fetchFavoritePlaces()
@@ -432,42 +489,7 @@ watch(dateRange, async (newValue) => {
     return
   }
 
-  // Skip if ANY fetch is in progress (more conservative)
-  if (isFetching.value) {
-    console.warn('Different fetch in progress, skipping:', rangeKey)
-    return
-  }
-
-  // Mark as fetching and set the range before starting async operation
-  isFetching.value = true
-  pendingFetchKey.value = rangeKey
-  lastFetchedRange.value = rangeKey
-
-  try {
-    // Clear stale map/timeline highlights immediately on date-range change.
-    // Otherwise the previously selected trip path can remain visible while the
-    // new range loads, which is confusing UX.
-    lastHighlightedPath.value = null
-    highlightStore.clearAllHighlights()
-
-    const shouldProceed = await checkDatasetSize(startDate, endDate)
-
-    if (!shouldProceed) {
-      mapDataLoading.value = false
-      timelineDataLoading.value = false
-      return
-    }
-
-    forceLoadLargeDataset.value = false
-
-    await Promise.all([
-      fetchLocationData(startDate, endDate),
-      fetchTimelineData(startDate, endDate),
-    ])
-  } finally {
-    isFetching.value = false
-    pendingFetchKey.value = null
-  }
+  await executeFetchForRange(startDate, endDate, rangeKey)
 }, { immediate: true })
 
 // Watch for today's date and get current location

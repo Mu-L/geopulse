@@ -152,6 +152,7 @@
           v-model:visible="photoViewerVisible"
           :photos="photoViewerPhotos"
           :initial-photo-index="photoViewerIndex"
+          @show-on-map="handlePhotoShowOnMap"
           @close="closePhotoViewer"
         />
 
@@ -169,13 +170,15 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onMounted, readonly, ref, watch} from 'vue'
+import {computed, nextTick, onMounted, onUnmounted, readonly, ref, watch} from 'vue'
 import {useRouter} from 'vue-router'
 import {useConfirm} from "primevue/useconfirm"
 import {useToast} from "primevue/usetoast"
 import ContextMenu from 'primevue/contextmenu'
 import ConfirmDialog from 'primevue/confirmdialog'
 import {useTimelineRegeneration} from '@/composables/useTimelineRegeneration'
+import { usePhotoMapMarkers } from '@/composables/usePhotoMapMarkers'
+import '@/styles/photo-map-markers.css'
 
 // Map components
 import {FavoritesLayer, HeatmapLayer, MapContainer, MapControls, PathLayer, TimelineLayer, CurrentLocationLayer, ImmichLayer} from '@/components/maps'
@@ -343,6 +346,29 @@ const {
   }
 })
 
+const openPhotoViewerFromPayload = (payload) => {
+  const photos = Array.isArray(payload?.photos) ? payload.photos : []
+  if (photos.length === 0) {
+    return
+  }
+
+  const safeIndex = Math.min(Math.max(0, payload?.initialIndex || 0), photos.length - 1)
+  photoViewerPhotos.value = photos
+  photoViewerIndex.value = safeIndex
+  photoViewerVisible.value = true
+}
+
+const {
+  clearFocusMarker: clearFocusedPhotoMarker,
+  focusOnPhoto: focusOnMapPhoto
+} = usePhotoMapMarkers({
+  emit: (eventName, payload) => {
+    if (eventName === 'photo-click') {
+      openPhotoViewerFromPayload(payload)
+    }
+  }
+})
+
 // Photo viewer state
 const photoViewerVisible = ref(false)
 const photoViewerPhotos = ref([])
@@ -483,6 +509,7 @@ const handleMapClick = (event) => {
   
   // Clear all highlights when clicking on empty map
   clearAllMapHighlights()
+  clearFocusedPhotoMarker()
 }
 
 const handleMapContextMenu = (event) => {
@@ -557,14 +584,24 @@ const handleFavoriteClick = (event) => {
 
 // Immich layer event handlers
 const handlePhotoClick = (event) => {
-  // Always open PhotoViewerDialog for consistent experience
-  photoViewerPhotos.value = event.photos || []
-  photoViewerIndex.value = event.initialIndex || 0
-  photoViewerVisible.value = true
+  openPhotoViewerFromPayload(event)
 }
 
 const handlePhotoHover = (event) => {
   // Could show preview tooltip in the future
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  if (!photo || typeof photo.latitude !== 'number' || typeof photo.longitude !== 'number' || !map.value) {
+    return
+  }
+
+  const targetZoom = Math.max(map.value.getZoom?.() || 0, 16)
+  focusOnMapPhoto(map.value, photo, targetZoom)
+}
+
+const focusOnPhoto = (photo) => {
+  handlePhotoShowOnMap(photo)
 }
 
 const handleImmichError = (event) => {
@@ -1023,11 +1060,16 @@ onMounted(() => {
   // Any additional initialization
 })
 
+onUnmounted(() => {
+  clearFocusedPhotoMarker()
+})
+
 // Expose methods for parent component
 defineExpose({
   map: readonly(map),
   clearAllHighlights: clearAllMapHighlights,
-  zoomToData: handleZoomToData
+  zoomToData: handleZoomToData,
+  focusOnPhoto
 })
 </script>
 

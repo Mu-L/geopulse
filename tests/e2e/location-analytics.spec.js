@@ -1,5 +1,7 @@
 import {test, expect} from '../fixtures/database-fixture.js';
 import {TestSetupHelper} from '../utils/test-setup-helper.js';
+import {TestData} from '../fixtures/test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Location Analytics Page', () => {
 
@@ -77,6 +79,34 @@ test.describe('Location Analytics Page', () => {
       // Verify data is displayed
       const cardCount = await locationAnalyticsPage.getLocationCardCount();
       expect(cardCount).toBeGreaterThan(0);
+    });
+
+    test('should display map recent-place last visit using user date format', async ({page, dbManager}) => {
+      const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+      const {locationAnalyticsPage, user} = await TestSetupHelper.loginAndNavigateToLocationAnalyticsPage(page, dbManager, testUser);
+
+      const geocodingId = await TestSetupHelper.createGeocodingResult(dbManager, user.id, {
+        coords: 'POINT(2.3522 48.8566)',
+        displayName: 'Paris Center',
+        city: 'Paris',
+        country: 'France'
+      });
+
+      await dbManager.client.query(`
+        INSERT INTO timeline_stays (user_id, geocoding_id, timestamp, stay_duration, location, location_name, location_source, created_at, last_updated)
+        VALUES ($1, $2, $3, 3600, ST_GeomFromText('POINT(2.3522 48.8566)', 4326), 'Paris Center', 'GEOCODING', NOW(), NOW())
+      `, [user.id, geocodingId, new Date('2025-09-21T15:00:00Z')]);
+
+      await locationAnalyticsPage.navigateToTab('map');
+      await locationAnalyticsPage.waitForPageLoad();
+      await page.waitForTimeout(2000);
+
+      const lastVisitText = await page.locator('.map-place-timeline').first().textContent();
+      DateFormatTestHelper.expectContainsDate(
+        lastVisitText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
     });
   });
 

@@ -104,10 +104,13 @@ const handleLayerReady = (layerGroup) => {
 }
 
 const renderTimelineMarkers = () => {
-  if (!baseLayerRef.value || !hasTimelineData.value) return
+  if (!baseLayerRef.value) return
 
-  // Clear existing markers
+  // Always clear existing markers first so stale markers are removed when
+  // a new range has no timeline data.
   clearTimelineMarkers()
+
+  if (!hasTimelineData.value) return
 
   props.timelineData.forEach((item, index) => {
     if (!item.latitude || !item.longitude) return
@@ -174,7 +177,10 @@ const renderTimelineMarkers = () => {
 }
 
 const createPopupContent = (item) => {
-  const dateStr = timezone.format(item.timestamp, 'YYYY-MM-DD HH:mm:ss')
+  const timestamp = item.timestamp || item.startTime
+  const dateStr = timestamp
+    ? `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
+    : 'Unknown time'
 
   // Handle different item types
   if (item.type === 'stay') {

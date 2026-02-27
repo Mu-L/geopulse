@@ -177,7 +177,7 @@ const isAnyLoading = computed(() => {
 
 const formattedDateRange = computed(() => {
   if (!dateRange.value || !dateRange.value[0] || !dateRange.value[1]) return 'No date range selected'
-  return `${timezone.format(dateRange.value[0], 'MMM DD')} - ${timezone.format(dateRange.value[1], 'MMM DD, YYYY')}`
+  return `${timezone.formatDateDisplay(dateRange.value[0])} - ${timezone.formatDateDisplay(dateRange.value[1])}`
 })
 
 const totalStays = computed(() => timelineStore.getStays?.length || 0)

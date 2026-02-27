@@ -63,10 +63,13 @@ const handleLayerReady = (layerGroup) => {
 }
 
 const renderPaths = () => {
-  if (!baseLayerRef.value || !hasPathData.value) return
+  if (!baseLayerRef.value) return
 
-  // Clear existing paths
+  // Always clear existing paths first so stale polylines are removed when
+  // a new range has no path data.
   clearPaths()
+
+  if (!hasPathData.value) return
 
   props.pathData.forEach((pathGroup, groupIndex) => {
 
@@ -227,6 +230,9 @@ watch(() => props.highlightedTrip, (newTrip) => {
         true // instant appearance
     )
 
+    const formatDateTimeDisplay = (dateValue) =>
+      `${timezone.formatDateDisplay(dateValue)} ${timezone.format(dateValue, 'HH:mm:ss')}`
+
     // Add popup to trip path
     const tripInfo = `
       <div class="trip-popup">
@@ -240,7 +246,7 @@ watch(() => props.highlightedTrip, (newTrip) => {
           Distance: ${formatDistance(newTrip.distanceMeters || 0)}
         </div>
         <div class="trip-detail">
-          ${timezone.format(newTrip.timestamp, 'YYYY-MM-DD HH:mm:ss')}
+          ${formatDateTimeDisplay(newTrip.timestamp)}
         </div>
       </div>
     `
@@ -255,7 +261,7 @@ watch(() => props.highlightedTrip, (newTrip) => {
           🚀 Trip Start
         </div>
         <div class="trip-detail">
-          Start: ${startTime.format('YYYY-MM-DD HH:mm:ss')}
+          Start: ${formatDateTimeDisplay(startTime.toISOString())}
         </div>
         <div class="trip-detail">
           Duration: ${formatDuration(newTrip.tripDuration)}
@@ -275,7 +281,7 @@ watch(() => props.highlightedTrip, (newTrip) => {
           🏁 Trip End
         </div>
         <div class="trip-detail">
-          End: ${endTime.format('YYYY-MM-DD HH:mm:ss')}
+          End: ${formatDateTimeDisplay(endTime.toISOString())}
         </div>
         <div class="trip-detail">
           Duration: ${formatDuration(newTrip.tripDuration)}

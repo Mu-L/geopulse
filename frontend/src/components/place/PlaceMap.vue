@@ -3,9 +3,10 @@
     <div class="place-map-container">
       <MapContainer
         ref="mapContainerRef"
-        map-id="place-details-map"
+        :map-id="mapId"
         :center="mapCenter"
         :zoom="mapZoom"
+        :map-options="mapOptions"
         :show-controls="false"
         @map-ready="handleMapReady"
       >
@@ -22,10 +23,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import BaseCard from '@/components/ui/base/BaseCard.vue'
 import { MapContainer } from '@/components/maps'
 import L from 'leaflet'
+import { usePhotoMapMarkers } from '@/composables/usePhotoMapMarkers'
+import '@/styles/photo-map-markers.css'
 
 const props = defineProps({
   geometry: {
@@ -35,8 +38,14 @@ const props = defineProps({
   locationName: {
     type: String,
     default: 'Place'
+  },
+  photos: {
+    type: Array,
+    default: () => []
   }
 })
+
+const emit = defineEmits(['photo-click'])
 
 const mapContainerRef = ref(null)
 const pointMarkerRef = ref(null)
@@ -44,6 +53,18 @@ const areaRectangleRef = ref(null)
 const map = ref(null)
 const marker = ref(null)
 const rectangle = ref(null)
+
+const mapId = `place-details-map-${Math.random().toString(36).slice(2, 11)}`
+const mapOptions = {
+  tap: false
+}
+const {
+  clearPhotoMarkers,
+  clearFocusMarker,
+  renderPhotoMarkers: renderMapPhotoMarkers,
+  focusOnCoordinates: focusOnMapCoordinates,
+  focusOnPhoto: focusOnMapPhoto
+} = usePhotoMapMarkers({ emit })
 
 const mapCenter = computed(() => {
   if (props.geometry.latitude && props.geometry.longitude) {
@@ -56,8 +77,13 @@ const mapZoom = computed(() => {
   return props.geometry.type === 'area' ? 13 : 15
 })
 
+const handleMapBackgroundClick = () => {
+  clearFocusMarker()
+}
+
 const handleMapReady = (mapInstance) => {
   map.value = mapInstance
+  map.value.on('click', handleMapBackgroundClick)
 
   nextTick(() => {
     if (props.geometry.type === 'point') {
@@ -65,6 +91,7 @@ const handleMapReady = (mapInstance) => {
     } else if (props.geometry.type === 'area') {
       addAreaRectangle()
     }
+    renderPhotoMarkers()
   })
 }
 
@@ -119,6 +146,20 @@ const addAreaRectangle = () => {
   map.value.fitBounds(bounds, { padding: [50, 50] })
 }
 
+const renderPhotoMarkers = () => {
+  if (!map.value) return
+
+  renderMapPhotoMarkers(map.value, props.photos)
+}
+
+const focusOnCoordinates = (latitude, longitude, zoom = 16) => {
+  focusOnMapCoordinates(map.value, latitude, longitude, zoom)
+}
+
+const focusOnPhoto = (photo, zoom = 16) => {
+  focusOnMapPhoto(map.value, photo, zoom)
+}
+
 // Watch for geometry changes
 watch(() => props.geometry, () => {
   nextTick(() => {
@@ -129,6 +170,33 @@ watch(() => props.geometry, () => {
     }
   })
 }, { deep: true })
+
+watch(() => props.photos, () => {
+  nextTick(() => {
+    renderPhotoMarkers()
+  })
+})
+
+onBeforeUnmount(() => {
+  clearPhotoMarkers()
+  if (map.value) {
+    map.value.off('click', handleMapBackgroundClick)
+  }
+  if (marker.value) {
+    marker.value.remove()
+    marker.value = null
+  }
+  if (rectangle.value) {
+    rectangle.value.remove()
+    rectangle.value = null
+  }
+  clearFocusMarker()
+})
+
+defineExpose({
+  focusOnCoordinates,
+  focusOnPhoto
+})
 </script>
 
 <style scoped>

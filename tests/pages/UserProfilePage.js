@@ -18,6 +18,9 @@ export class UserProfilePage {
         timezoneDropdownTrigger: '#timezone .p-select-dropdown, #timezone .p-select-label',
         timezoneOptions: '[role="option"], .p-select-option',
         timezoneLabel: '#timezone .p-select-label',
+        dateFormatDropdown: '#dateFormat',
+        dateFormatLabel: '#dateFormat .p-select-label',
+        dateFormatOptions: '[role="option"], .p-select-option',
         defaultRedirectUrlDropdown: '#defaultRedirectUrl',
         defaultRedirectUrlLabel: '#defaultRedirectUrl .p-select-label',
         defaultRedirectUrlOptions: '[role="option"], .p-select-option',
@@ -333,6 +336,41 @@ export class UserProfilePage {
       return userInfoStr ? JSON.parse(userInfoStr) : null;
     });
     return userInfo?.timezone || null;
+  }
+
+  /**
+   * Select date format from dropdown
+   */
+  async selectDateFormat(dateFormatLabel) {
+    await this.page.click(this.selectors.profile.dateFormatLabel);
+    await this.page.waitForSelector(this.selectors.profile.dateFormatOptions, { timeout: 10000 });
+
+    const optionSelector = this.page.locator(this.selectors.profile.dateFormatOptions).filter({ hasText: dateFormatLabel });
+    await optionSelector.first().click();
+    await this.page.waitForTimeout(500);
+  }
+
+  /**
+   * Get currently selected date format label
+   */
+  async getSelectedDateFormat() {
+    const dropdownLabel = this.page.locator(this.selectors.profile.dateFormatLabel);
+    const text = await dropdownLabel.textContent();
+    if (text === 'Select your preferred date format') {
+      return null;
+    }
+    return text?.trim();
+  }
+
+  /**
+   * Get date format value from localStorage
+   */
+  async getDateFormatFromLocalStorage() {
+    const userInfo = await this.page.evaluate(() => {
+      const userInfoStr = localStorage.getItem('userInfo');
+      return userInfoStr ? JSON.parse(userInfoStr) : null;
+    });
+    return userInfo?.dateFormat || null;
   }
 
   /**

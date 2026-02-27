@@ -20,6 +20,7 @@
               v-model="dateRange"
               selectionMode="range"
               :maxDate="new Date()"
+              :dateFormat="timezone.getPrimeVueDatePickerFormat()"
               placeholder="Select date range"
               showButtonBar
               @update:modelValue="onFilterChange"
@@ -286,10 +287,12 @@ import Toast from 'primevue/toast'
 import Breadcrumb from 'primevue/breadcrumb'
 import { useToast } from 'primevue/usetoast'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
+import { useTimezone } from '@/composables/useTimezone'
 import adminService from '@/utils/adminService'
 
 const router = useRouter()
 const toast = useToast()
+const timezone = useTimezone()
 
 const breadcrumbHome = ref({
   icon: 'pi pi-home',
@@ -426,17 +429,17 @@ const clearFilters = () => {
 
 const formatDate = (timestamp) => {
   if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleDateString()
+  return timezone.formatDateDisplay(timestamp)
 }
 
 const formatTime = (timestamp) => {
   if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleTimeString()
+  return timezone.format(timestamp, 'HH:mm:ss')
 }
 
 const formatFullTimestamp = (timestamp) => {
   if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleString()
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
 }
 
 const formatActionType = (actionType) => {

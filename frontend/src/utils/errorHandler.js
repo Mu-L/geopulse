@@ -2,6 +2,21 @@
  * Error handling utilities for GeoPulse frontend
  */
 
+function getErrorText(value) {
+  if (!value) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') {
+    const parts = [value.message, value.error, value.details].filter(Boolean)
+    if (parts.length > 0) return parts.join(' ')
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return ''
+    }
+  }
+  return String(value)
+}
+
 /**
  * Convert API/Network errors into user-friendly messages
  * @param {Error} error - The original error object
@@ -167,12 +182,32 @@ export function isBackendDown(error) {
     return false
   }
 
+  const responseStatus = error.response?.status
+  const responseText = getErrorText(error.response?.data)
+  const statusText = getErrorText(error.response?.statusText)
+  const messageText = getErrorText(error.message)
+  const combinedText = `${responseText} ${statusText} ${messageText}`
+  const requestUrl = error.config?.url || error.url || ''
+  const upstreamConnectionFailurePattern = /(ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT|socket hang up|upstream|proxy error|connect ECONNREFUSED|connection refused)/i
+  const isHealthOrPublicAuthProbe =
+    requestUrl.includes('/health') ||
+    requestUrl.includes('/auth/refresh-cookie') ||
+    requestUrl.includes('/auth/status') ||
+    requestUrl.includes('/auth/login') ||
+    requestUrl.includes('/auth/oidc/providers')
+  const isLocalProxy500ForBackendDown =
+    responseStatus === 500 && (
+      upstreamConnectionFailurePattern.test(combinedText) ||
+      isHealthOrPublicAuthProbe
+    )
+
   return (
     error.code === 'NETWORK_ERROR' ||
     error.message === 'Network Error' ||
     error.message?.includes('ERR_NETWORK') ||
     error.message?.includes('Failed to fetch') ||
-    (error.response && [502, 503, 504].includes(error.response.status))
+    (error.response && [502, 503, 504].includes(error.response.status)) ||
+    isLocalProxy500ForBackendDown
   )
 }
 

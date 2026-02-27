@@ -285,8 +285,13 @@ const processFriendsForMap = (friends) => {
 // No watchers needed - using computed properties
 
 // Update map center when data changes
-watch(dataBounds, (newBounds) => {
+watch(dataBounds, (newBounds, oldBounds) => {
   if (newBounds && map.value) {
+    // Avoid recentering on every background poll; only auto-fit when locations appear.
+    if (oldBounds) {
+      return
+    }
+
     nextTick(() => {
       try {
         map.value.fitBounds(newBounds, {padding: [20, 20]})

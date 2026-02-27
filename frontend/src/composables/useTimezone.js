@@ -17,6 +17,25 @@ dayjs.extend(isSameOrBefore)
 dayjs.extend(isSameOrAfter)
 dayjs.extend(customParseFormat)
 
+const DEFAULT_DATE_FORMAT = 'MDY'
+const DATE_FORMAT_PATTERNS = {
+    MDY: 'MM/DD/YYYY',
+    DMY: 'DD/MM/YYYY',
+    YMD: 'YYYY-MM-DD'
+}
+const DATE_FORMAT_PRIMEVUE = {
+    MDY: 'mm/dd/yy',
+    DMY: 'dd/mm/yy',
+    YMD: 'yy-mm-dd'
+}
+
+const normalizeDateFormat = (value) => {
+    const normalized = String(value || '').trim().toUpperCase()
+    return Object.prototype.hasOwnProperty.call(DATE_FORMAT_PATTERNS, normalized)
+        ? normalized
+        : DEFAULT_DATE_FORMAT
+}
+
 const getUserTimezoneFromStorage = () => {
     try {
         const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
@@ -27,7 +46,18 @@ const getUserTimezoneFromStorage = () => {
     }
 }
 
+const getUserDateFormatFromStorage = () => {
+    try {
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+        return normalizeDateFormat(userInfo.dateFormat)
+    } catch (error) {
+        console.warn('Failed to get user date format from localStorage:', error)
+        return DEFAULT_DATE_FORMAT
+    }
+}
+
 const userTimezone = ref(getUserTimezoneFromStorage())
+const userDateFormat = ref(getUserDateFormatFromStorage())
 
 export function useTimezone() {
     // --- Core Timezone Management ---
@@ -37,6 +67,12 @@ export function useTimezone() {
     }
 
     const getTimezone = () => userTimezone.value
+
+    const setDateFormat = (dateFormat) => {
+        userDateFormat.value = normalizeDateFormat(dateFormat)
+    }
+
+    const getDateFormat = () => userDateFormat.value
 
     const now = () => {
         // Use explicit Date object to avoid browser timezone detection issues (LibreWolf, etc.)
@@ -93,15 +129,27 @@ export function useTimezone() {
     }
 
     const parseUrlDate = (dateString, isEndDate = false) => {
-        if (!dateString) return null;
+        if (!dateString) return null
 
-        // Parse MM/DD/YYYY format from URL
-        const date = dayjs.tz(dateString, 'MM/DD/YYYY', userTimezone.value)
+        const formatsToTry = ['YYYY-MM-DD'] // Preferred URL format (stable/locale-independent)
 
-        if (!date.isValid()) return null;
+        const userFormat = DATE_FORMAT_PATTERNS[getDateFormat()]
+        if (userFormat && !formatsToTry.includes(userFormat)) {
+            formatsToTry.push(userFormat)
+        }
 
-        const result = isEndDate ? endOfDayUtc(date) : startOfDayUtc(date);
-        return result;
+        if (!formatsToTry.includes('MM/DD/YYYY')) {
+            formatsToTry.push('MM/DD/YYYY') // Legacy URL format for backward compatibility
+        }
+
+        for (const formatPattern of formatsToTry) {
+            const date = dayjs.tz(dateString, formatPattern, userTimezone.value)
+            if (date.isValid()) {
+                return isEndDate ? endOfDayUtc(date) : startOfDayUtc(date)
+            }
+        }
+
+        return null
     }
 
     const convertUtcRangeToCalendarDates = (utcStart, utcEnd) => {
@@ -169,6 +217,12 @@ export function useTimezone() {
 
     const formatDateUS = (date) => format(date, 'MM/DD/YYYY')
 
+    const formatDateDisplay = (date) => format(date, DATE_FORMAT_PATTERNS[getDateFormat()])
+
+    const formatUrlDate = (date) => format(date, 'YYYY-MM-DD')
+
+    const getPrimeVueDatePickerFormat = () => DATE_FORMAT_PRIMEVUE[getDateFormat()]
+
     const formatDateLong = (date) => {
         // Handle YYYY-MM-DD strings directly in user timezone
         const dateObj = dayjs.tz(date, userTimezone.value);
@@ -188,7 +242,7 @@ export function useTimezone() {
         if (nowObj.diff(dateObj, 'hour') < 24) return `${nowObj.diff(dateObj, 'hour')} hours ago`
         if (nowObj.diff(dateObj, 'day') < 30) return `${nowObj.diff(dateObj, 'day')} days ago`
 
-        return dateObj.format('YYYY-MM-DD')
+        return formatDateDisplay(date)
     }
 
     // --- Timeline-Specific Helpers ---
@@ -440,7 +494,7 @@ export function useTimezone() {
 
         if (isStartDay) {
             // Show actual start time on start day
-            return format(utcTimestamp, 'MM/DD/YYYY, HH:mm')
+            return format(utcTimestamp, `${DATE_FORMAT_PATTERNS[getDateFormat()]}, HH:mm`)
         } else {
             // Show "Continued from" on other days
             const startDate = fromUtc(utcTimestamp)
@@ -463,8 +517,11 @@ export function useTimezone() {
     return {
         // Core
         userTimezone,
+        userDateFormat,
         setTimezone,
         getTimezone,
+        setDateFormat,
+        getDateFormat,
         now,
         fromUtc,
         toUtc,
@@ -506,9 +563,12 @@ export function useTimezone() {
         formatTime,
         formatDate,
         formatDateUS,
+        formatDateDisplay,
         formatDateLong,
         formatDateShort,
         formatDateWithYear,
+        formatUrlDate,
+        getPrimeVueDatePickerFormat,
         timeAgo,
 
         // Timeline Specific

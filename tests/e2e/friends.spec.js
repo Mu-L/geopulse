@@ -2,6 +2,7 @@ import {test, expect} from '../fixtures/database-fixture.js';
 import {FriendsPage} from '../pages/FriendsPage.js';
 import {insertVerifiableStaysTestData, insertVerifiableTripsTestData} from '../utils/timeline-test-data.js';
 import {TestSetupHelper} from "../utils/test-setup-helper.js";
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Friends Page', () => {
 
@@ -748,6 +749,117 @@ test.describe('Friends Page', () => {
       }
     });
 
+    test('should auto-refresh live map when friend location changes (polling)', async ({page, dbManager}) => {
+      let friendsEndpointGetCalls = 0;
+      const friendCoordinatesHistory = [];
+      let trackedFriendId = null;
+
+      await page.route('**/api/friends**', async (route) => {
+        const request = route.request();
+        const pathname = new URL(request.url()).pathname;
+        const isFriendsEndpoint = /\/api\/friends\/?$/.test(pathname);
+
+        if (!isFriendsEndpoint || request.method() !== 'GET') {
+          await route.continue();
+          return;
+        }
+
+        const backendResponse = await route.fetch();
+        const body = await backendResponse.text();
+
+        friendsEndpointGetCalls++;
+
+        try {
+          const payload = JSON.parse(body);
+          const friendsData = Array.isArray(payload?.data) ? payload.data : [];
+
+          if (trackedFriendId) {
+            const trackedFriendIdNormalized = String(trackedFriendId).toLowerCase();
+            const friend = friendsData.find(f =>
+              String(f.friendId || f.userId || '').toLowerCase() === trackedFriendIdNormalized
+            );
+
+            if (friend) {
+              friendCoordinatesHistory.push({
+                lat: friend.lastLatitude,
+                lon: friend.lastLongitude
+              });
+            }
+          }
+        } catch {
+          // Ignore parsing errors and still pass through backend response.
+        }
+
+        await route.fulfill({
+          response: backendResponse,
+          body
+        });
+      });
+
+      const {testUser, user, friends, friendsPage} =
+        await TestSetupHelper.setupMultipleFriendsTest(page, dbManager, 1, false);
+
+      const friendId = friends[0].dbUser.id;
+      trackedFriendId = friendId;
+
+      // Initial location + live sharing permission before login/navigation.
+      await TestSetupHelper.setupFriendshipWithLocation(
+        dbManager,
+        user.id,
+        friendId,
+        50.4501,
+        30.5234,
+        true
+      );
+
+      await TestSetupHelper.loginAndNavigateToFriendsPage(page, testUser, friendsPage);
+      expect(await friendsPage.isTabActive('live')).toBe(true);
+
+      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 15000 });
+      await expect.poll(() => friendCoordinatesHistory.length, {
+        timeout: 30000
+      }).toBeGreaterThan(0);
+
+      const initialCoordinates = friendCoordinatesHistory[friendCoordinatesHistory.length - 1];
+      expect(initialCoordinates.lat).toBeCloseTo(50.4501, 4);
+      expect(initialCoordinates.lon).toBeCloseTo(30.5234, 4);
+      const callsBeforeLocationUpdate = friendsEndpointGetCalls;
+
+      // Insert a newer GPS point for the same friend (same source of truth used by /api/friends).
+      const newerTimestamp = new Date(Date.now() + 60_000).toISOString();
+      await dbManager.client.query(`
+        INSERT INTO gps_points (id, device_id, user_id, coordinates, timestamp, accuracy, battery, velocity, altitude, source_type, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        Date.now() + 100000,
+        'polling-test-device',
+        friendId,
+        'POINT (30.5334 50.4601)',
+        newerTimestamp,
+        10,
+        100,
+        0,
+        0,
+        'TEST',
+        newerTimestamp
+      ]);
+
+      // Polling should fetch /api/friends again and update marker position automatically.
+      await expect.poll(() => friendsEndpointGetCalls, {
+        timeout: 45000
+      }).toBeGreaterThan(callsBeforeLocationUpdate);
+
+      await expect.poll(() => {
+        const last = friendCoordinatesHistory[friendCoordinatesHistory.length - 1];
+        if (!last) return '';
+        return `${Number(last.lat).toFixed(4)},${Number(last.lon).toFixed(4)}`;
+      }, {
+        timeout: 45000
+      }).toBe('50.4601,30.5334');
+
+      expect(friendsEndpointGetCalls).toBeGreaterThanOrEqual(2);
+    });
+
     test('should show only friends with timeline permission on Timeline tab', async ({page, dbManager}) => {
       const {testUser, user, friends, loginPage, friendsPage} =
         await TestSetupHelper.setupMultipleFriendsTest(page, dbManager, 3, false);
@@ -801,6 +913,7 @@ test.describe('Friends Page', () => {
     test('should display friend timeline data with date range selection', async ({page, dbManager}) => {
       const {testUser, user, friends, loginPage, friendsPage} =
         await TestSetupHelper.setupMultipleFriendsTest(page, dbManager, 2, false);
+      await dbManager.client.query('UPDATE users SET date_format = $1 WHERE id = $2', [DateFormatValues.DMY, user.id]);
 
       // Create friendships with timeline permissions BEFORE logging in
       await TestSetupHelper.setupFriendship(dbManager, user.id, friends[0].dbUser.id, {
@@ -921,6 +1034,10 @@ test.describe('Friends Page', () => {
         await page.waitForTimeout(2000); // Wait for timeline to reload with new date range
       }
 
+      const dateRangeInputValue = await page.locator('.date-range-picker .p-datepicker-input').first().inputValue();
+      expect(dateRangeInputValue).toContain('20/09/2025');
+      expect(dateRangeInputValue).toContain('22/09/2025');
+
       // PHASE 3: Verify timeline items now appear
       timelineItems = page.locator('.friend-timeline-card');
       itemCount = await timelineItems.count();
@@ -928,6 +1045,12 @@ test.describe('Friends Page', () => {
       // Each friend has 3 stays and 3 trips = 6 items per friend = 12 total
       // Should now show timeline items for September 21, 2025
       expect(itemCount).toBeGreaterThan(0);
+      const firstTimelineItemText = await timelineItems.first().textContent();
+      DateFormatTestHelper.expectContainsDate(
+        firstTimelineItemText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
       // Verify timeline map is visible
       const timelineMap = page.locator('.leaflet-container');
       expect(await timelineMap.isVisible()).toBe(true);

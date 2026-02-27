@@ -264,7 +264,7 @@ const hasAnyVisitTripTag = computed(() => {
 })
 
 const formatDate = (timestamp) => {
-  return timezone.format(timestamp, 'YYYY-MM-DD')
+  return timezone.formatDateDisplay(timestamp)
 }
 
 const formatTime = (timestamp) => {
@@ -295,7 +295,7 @@ const getEndDate = (visit) => {
   const startTime = timezone.fromUtc(visit.timestamp)
   const endTime = startTime.clone().add(visit.stayDuration, 'seconds')
 
-  return timezone.format(endTime.toISOString(), 'YYYY-MM-DD')
+  return timezone.formatDateDisplay(endTime.toISOString())
 }
 
 const getEndTime = (visit) => {

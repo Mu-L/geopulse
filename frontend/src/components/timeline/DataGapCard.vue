@@ -56,13 +56,13 @@ const handleClick = () => {
 
 const formattedStartTime = computed(() => {
   if (!props.dataGapItem.startTime) return '';
-  return timezone.format(props.dataGapItem.startTime);
-});
+  return `${timezone.formatDateDisplay(props.dataGapItem.startTime)} ${timezone.formatTime(props.dataGapItem.startTime)}`
+})
 
 const formattedEndTime = computed(() => {
   if (!props.dataGapItem.endTime) return '';
-  return timezone.format(props.dataGapItem.endTime);
-});
+  return `${timezone.formatDateDisplay(props.dataGapItem.endTime)} ${timezone.formatTime(props.dataGapItem.endTime)}`
+})
 </script>
 
 <style scoped>

@@ -67,15 +67,19 @@
               v-if="slotProps.item.type === 'stay' && isOvernightItem(slotProps.item)"
               :stay-item="slotProps.item"
               :current-date="dateGroup.date"
+              :immich-photos="immichPhotosForCards"
               @click="handleTimelineItemClick"
               @export-gpx="handleExportStayAsGpx"
+              @photo-show-on-map="handlePhotoShowOnMap"
             />
 
             <StayCard
               v-else-if="slotProps.item.type === 'stay'"
               :stay-item="slotProps.item"
+              :immich-photos="immichPhotosForCards"
               @click="handleTimelineItemClick"
               @export-gpx="handleExportStayAsGpx"
+              @photo-show-on-map="handlePhotoShowOnMap"
             />
 
             <!-- Trip Cards -->
@@ -83,17 +87,21 @@
               v-if="slotProps.item.type === 'trip' && isOvernightItem(slotProps.item)"
               :trip-item="slotProps.item"
               :current-date="dateGroup.date"
+              :immich-photos="immichPhotosForCards"
               @click="handleTimelineItemClick"
               @export-gpx="handleExportTripAsGpx"
               @show-classification="handleShowClassification"
+              @photo-show-on-map="handlePhotoShowOnMap"
             />
 
             <TripCard
               v-else-if="slotProps.item.type === 'trip'"
               :trip-item="slotProps.item"
+              :immich-photos="immichPhotosForCards"
               @click="handleTimelineItemClick"
               @export-gpx="handleExportTripAsGpx"
               @show-classification="handleShowClassification"
+              @photo-show-on-map="handlePhotoShowOnMap"
             />
 
             <!-- Data Gap Cards -->
@@ -131,6 +139,7 @@ import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
 import { useExportImportStore } from '@/stores/exportImport'
 import { usePeriodTagsStore } from '@/stores/periodTags'
+import { useImmichStore } from '@/stores/immich'
 import StayCard from './StayCard.vue'
 import TripCard from './TripCard.vue'
 import DataGapCard from './DataGapCard.vue'
@@ -147,6 +156,7 @@ const TripClassificationDialog = defineAsyncComponent(() =>
 const toast = useToast()
 const exportImportStore = useExportImportStore()
 const periodTagsStore = usePeriodTagsStore()
+const immichStore = useImmichStore()
 
 // Display limit for progressive loading
 const displayLimit = ref(50)
@@ -176,7 +186,7 @@ const props = defineProps({
 })
 
 // Emits
-const emit = defineEmits(['timeline-item-click', 'tag-clicked'])
+const emit = defineEmits(['timeline-item-click', 'tag-clicked', 'photo-show-on-map'])
 
 // Composables
 const timezone = useTimezone()
@@ -284,6 +294,14 @@ const groupedTimelineData = computed(() => {
     .sort((a, b) => timezone.diff(a.date, b.date, 'day'));
 })
 
+const immichPhotosForCards = computed(() => {
+  if (!immichStore.isConfigured) {
+    return []
+  }
+
+  return Array.isArray(immichStore.photos) ? immichStore.photos : []
+})
+
 // Methods
 const loadMore = () => {
   // Load 100 more items each time
@@ -297,6 +315,10 @@ const handleTimelineItemClick = (item) => {
 
 const handleTagClick = (tag) => {
   emit('tag-clicked', tag)
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  emit('photo-show-on-map', photo)
 }
 
 const handleExportTripAsGpx = async (tripItem) => {
@@ -363,9 +385,35 @@ const loadPeriodTags = async () => {
   }
 }
 
+const loadImmichPhotosForCards = async () => {
+  if (!props.dateRange || props.dateRange.length !== 2) {
+    return
+  }
+
+  const [startDate, endDate] = props.dateRange
+  if (!startDate || !endDate) {
+    return
+  }
+
+  try {
+    if (!immichStore.hasConfig && !immichStore.configLoading) {
+      await immichStore.fetchConfig()
+    }
+
+    if (!immichStore.isConfigured) {
+      return
+    }
+
+    await immichStore.fetchPhotos(startDate, endDate)
+  } catch (error) {
+    console.warn('Failed to load Immich photos for timeline cards:', error)
+  }
+}
+
 // Watch for date range changes
 watch(() => props.dateRange, () => {
   loadPeriodTags()
+  loadImmichPhotosForCards()
 }, { deep: true, immediate: true })
 </script>
 

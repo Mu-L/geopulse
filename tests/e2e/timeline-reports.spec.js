@@ -2,6 +2,7 @@ import {test, expect} from '../fixtures/database-fixture.js';
 import {TimelineReportsPage} from '../pages/TimelineReportsPage.js';
 import {TestData} from '../fixtures/test-data.js';
 import * as TimelineTestData from '../utils/timeline-test-data.js';
+import {DateFormatTestHelper, DateFormatValues, KnownDateStrings} from '../utils/date-format-test-helper.js';
 
 test.describe('Timeline Reports Page', () => {
 
@@ -67,9 +68,33 @@ test.describe('Timeline Reports Page', () => {
       await reportsPage.waitForContentLoaded();
 
       const dateRangeText = await reportsPage.getDateRangeText();
-      expect(dateRangeText).toContain('Sep');
-      expect(dateRangeText).toContain('21');
-      expect(dateRangeText).toContain('2025');
+      expect(dateRangeText).toMatch(
+        /(09\/21\/2025|21\/09\/2025|2025-09-21)\s*-\s*(09\/21\/2025|21\/09\/2025|2025-09-21)/
+      );
+    });
+
+    test('should apply user date format to header range and table dates', async ({page, dbManager}) => {
+      const reportsPage = new TimelineReportsPage(page);
+      const testUser = { ...TestData.users.existing, dateFormat: DateFormatValues.DMY };
+
+      await reportsPage.setupWithData(dbManager, TimelineTestData.insertVerifiableStaysTestData, testUser, testDateRange);
+      await reportsPage.waitForContentLoaded();
+
+      const dateRangeText = await reportsPage.getDateRangeText();
+      DateFormatTestHelper.expectContainsDate(
+        dateRangeText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
+
+      await reportsPage.switchToTab('Stays');
+      const tableData = await reportsPage.getTableData();
+      const firstRowText = (tableData[0] || []).join(' ');
+      DateFormatTestHelper.expectContainsDate(
+        firstRowText,
+        KnownDateStrings.sep21_2025.DMY,
+        KnownDateStrings.sep21_2025.MDY
+      );
     });
 
     test('should display correct quick stats for stays', async ({page, dbManager}) => {

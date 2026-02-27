@@ -233,6 +233,7 @@
               showTime
               hourFormat="24"
               :minDate="new Date()"
+              :dateFormat="timezone.getPrimeVueDatePickerFormat()"
               placeholder="Select expiration date"
               class="w-full"
             />
@@ -337,11 +338,13 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { useToast } from 'primevue/usetoast'
 import AppLayout from '@/components/ui/layout/AppLayout.vue'
+import { useTimezone } from '@/composables/useTimezone'
 import apiService from '@/utils/apiService'
 import { copyToClipboard as copyTextToClipboard } from '@/utils/clipboardUtils'
 
 const router = useRouter()
 const toast = useToast()
+const timezone = useTimezone()
 
 const breadcrumbHome = ref({
   icon: 'pi pi-home',
@@ -552,8 +555,7 @@ const getStatusSeverity = (status) => {
 
 const formatDateTime = (dateStr) => {
   if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleString()
+  return `${timezone.formatDateDisplay(dateStr)} ${timezone.format(dateStr, 'HH:mm:ss')}`
 }
 
 // Mobile pagination methods

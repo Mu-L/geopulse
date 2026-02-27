@@ -203,7 +203,40 @@ const isOnline = ref(navigator.onLine)
 const backendOnline = ref(false)
 const lastUpdated = ref(timezone.now().format('HH:mm:ss'))
 const checkingStatus = ref(false)
+const recovering = ref(false)
 let statusCheckInterval = null
+let recoveryRedirectTimeout = null
+const BACKEND_STATUS_POLL_INTERVAL_MS = 15000
+
+const getRecoveryTarget = () => {
+  try {
+    const target = sessionStorage.getItem('errorReturnTo')
+    if (target && !target.startsWith('/error')) {
+      return target
+    }
+  } catch (error) {
+    console.warn('Unable to read recovery target from session storage:', error)
+  }
+
+  return '/'
+}
+
+const redirectAfterRecovery = () => {
+  if (recovering.value) return
+
+  recovering.value = true
+  const target = getRecoveryTarget()
+
+  recoveryRedirectTimeout = setTimeout(() => {
+    try {
+      sessionStorage.removeItem('errorReturnTo')
+    } catch (error) {
+      console.warn('Unable to clear recovery target from session storage:', error)
+    }
+
+    window.location.replace(target)
+  }, 1500)
+}
 
 // Update connection status
 const updateConnectionStatus = async () => {
@@ -216,6 +249,10 @@ const updateConnectionStatus = async () => {
 
 // Check if backend is reachable
 const checkBackendConnectivity = async () => {
+  if (checkingStatus.value || recovering.value) {
+    return
+  }
+
   if (!isOnline.value) {
     backendOnline.value = false
     return
@@ -235,18 +272,16 @@ const checkBackendConnectivity = async () => {
     
     backendOnline.value = response.ok
     
-    // If backend just came back online, show success and redirect
-    if (backendOnline.value && wasOffline) {
+    // Only auto-recover from the backend connection error screen
+    if (props.errorType === 'connection' && backendOnline.value && wasOffline) {
       toast.add({
         severity: 'success',
         summary: 'Connection Restored!',
         detail: 'GeoPulse servers are back online. Redirecting...',
         life: 3000
       })
-      
-      // setTimeout(() => {
-      //   window.location.href = '/'
-      // }, 2000)
+
+      redirectAfterRecovery()
     }
   } catch (error) {
     backendOnline.value = false
@@ -271,10 +306,10 @@ onMounted(async () => {
   // Initial backend status check
   await checkBackendConnectivity()
   
-  // Check backend status every 30 seconds
+  // Check backend status periodically and auto-recover when it comes back
   statusCheckInterval = setInterval(async () => {
     await checkBackendConnectivity()
-  }, 30000)
+  }, BACKEND_STATUS_POLL_INTERVAL_MS)
 })
 
 onUnmounted(() => {
@@ -284,6 +319,10 @@ onUnmounted(() => {
   // Clear the status check interval
   if (statusCheckInterval) {
     clearInterval(statusCheckInterval)
+  }
+
+  if (recoveryRedirectTimeout) {
+    clearTimeout(recoveryRedirectTimeout)
   }
 })
 
@@ -371,7 +410,8 @@ const checkBackendStatus = async () => {
     // Try to ping the backend with a simple health check
     const response = await fetch(`${API_BASE_URL}/health`, {
       method: 'GET',
-      timeout: 5000
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-cache'
     })
     
     if (response.ok) {
@@ -382,11 +422,8 @@ const checkBackendStatus = async () => {
         detail: 'GeoPulse servers are back online. Redirecting...',
         life: 3000
       })
-      
-      // Redirect back to the main app after a short delay
-      setTimeout(() => {
-        window.location.href = '/'
-      }, 1500)
+
+      redirectAfterRecovery()
     } else {
       throw new Error('Backend still unavailable')
     }
@@ -425,7 +462,7 @@ const getStatusClass = (status) => {
 const formatTimestamp = (timestamp) => {
   if (!timestamp) return 'N/A'
   try {
-    return timezone.format(timestamp, 'YYYY-MM-DD HH:mm:ss')
+    return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
   } catch (error) {
     return timestamp
   }

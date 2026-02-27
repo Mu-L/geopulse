@@ -212,7 +212,7 @@ export class ShareLinksPage {
   }
 
   async getLinkCardByName(name) {
-    return this.page.locator(`.link-card:has(.link-title:has-text("${name}"))`);
+    return this.page.locator(`.link-card:has(.link-title:has-text("${name}"))`).first();
   }
 
   async isLinkActive(name) {
@@ -236,12 +236,32 @@ export class ShareLinksPage {
 
   async getLinkSetting(linkName, settingLabel) {
     const card = await this.getLinkCardByName(linkName);
-    // Use a more flexible selector that matches partial text
-    const settingItem = card.locator('.setting-item').filter({
-      has: this.page.locator('.setting-label').filter({ hasText: settingLabel })
-    });
-    const value = await settingItem.locator(this.selectors.settingValue).textContent();
-    return value.trim();
+    await card.waitFor({ state: 'visible', timeout: 15000 });
+
+    const normalize = (text) => (text || '').replace(/\s+/g, ' ').replace(/:\s*$/, '').trim().toLowerCase();
+    const targetLabel = normalize(settingLabel);
+
+    const rows = card.locator(this.selectors.settingItem);
+    const rowCount = await rows.count();
+    const availableLabels = [];
+
+    for (let i = 0; i < rowCount; i++) {
+      const row = rows.nth(i);
+      const labelText = await row.locator(this.selectors.settingLabel).first().textContent().catch(() => '');
+      const normalizedLabel = normalize(labelText);
+      if (normalizedLabel) {
+        availableLabels.push(normalizedLabel);
+      }
+
+      if (normalizedLabel.includes(targetLabel)) {
+        const valueText = await row.locator(this.selectors.settingValue).first().innerText();
+        return valueText.replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    throw new Error(
+      `Setting "${settingLabel}" not found in link card "${linkName}". Available labels: ${availableLabels.join(', ')}`
+    );
   }
 
   async isPasswordProtected(linkName) {

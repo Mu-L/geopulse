@@ -5,9 +5,15 @@
     @contextmenu="showContextMenu"
   >
     <template #title>
-      <p class="timeline-timestamp">
-        🕐 {{ formattedTimestamp }}
-      </p>
+      <div class="timeline-title-row">
+        <p class="timeline-timestamp">
+          🕐 {{ formattedTimestamp }}
+        </p>
+        <TimelinePhotoPreviewTrigger
+          :photos="matchingPhotos"
+          @photo-show-on-map="handlePhotoShowOnMap"
+        />
+      </div>
     </template>
 
     <template #subtitle>
@@ -47,6 +53,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatDuration } from '@/utils/calculationsHelpers'
 import { useTimezone } from '@/composables/useTimezone'
+import { useTimelineCardPhotoMatching } from '@/composables/useTimelineCardPhotoMatching'
+import TimelinePhotoPreviewTrigger from './TimelinePhotoPreviewTrigger.vue'
 
 const router = useRouter()
 
@@ -54,10 +62,14 @@ const props = defineProps({
   stayItem: {
     type: Object,
     required: true
+  },
+  immichPhotos: {
+    type: Array,
+    default: () => []
   }
 })
 
-const emit = defineEmits(['click', 'export-gpx'])
+const emit = defineEmits(['click', 'export-gpx', 'photo-show-on-map'])
 
 const contextMenu = ref(null)
 
@@ -116,8 +128,18 @@ const contextMenuItems = computed(() => {
 
 const timezone = useTimezone()
 
+const { matchingPhotos } = useTimelineCardPhotoMatching({
+  itemRef: computed(() => props.stayItem),
+  immichPhotosRef: computed(() => props.immichPhotos),
+  durationField: 'stayDuration'
+})
+
 const handleClick = () => {
   emit('click', props.stayItem)
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  emit('photo-show-on-map', photo)
 }
 
 const showContextMenu = (event) => {
@@ -166,8 +188,8 @@ const formatOnThisDayDuration = (stayItem) => {
 
 const formattedTimestamp = computed(() => {
   if (!props.stayItem.timestamp) return '';
-  return timezone.format(props.stayItem.timestamp);
-});
+  return `${timezone.formatDateDisplay(props.stayItem.timestamp)} ${timezone.formatTime(props.stayItem.timestamp)}`
+})
 </script>
 
 <style scoped>
@@ -228,6 +250,13 @@ const formattedTimestamp = computed(() => {
   font-size: 0.95rem;
   margin: 0;
   line-height: 1.2;
+}
+
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gp-spacing-sm);
 }
 
 .timeline-subtitle {

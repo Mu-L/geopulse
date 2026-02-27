@@ -208,7 +208,7 @@
                 <Calendar
                     id="startDate"
                     v-model="exportStartDate"
-                    dateFormat="yy-mm-dd"
+                    :dateFormat="timezone.getPrimeVueDatePickerFormat()"
                     placeholder="Select start date"
                     showIcon
                     class="date-picker"
@@ -219,7 +219,7 @@
                 <Calendar
                     id="endDate"
                     v-model="exportEndDate"
-                    dateFormat="yy-mm-dd"
+                    :dateFormat="timezone.getPrimeVueDatePickerFormat()"
                     placeholder="Select end date"
                     showIcon
                     class="date-picker"
@@ -639,13 +639,13 @@ const isJobExpired = (job) => {
 }
 
 const formatDate = (dateString) => {
-  return timezone.format(dateString, 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(dateString)} ${timezone.format(dateString, 'HH:mm:ss')}`
 }
 
 const formatDateRange = (dateRange) => {
   if (!dateRange) return 'All time'
-  const start = timezone.fromUtc(dateRange.startDate).format('YYYY-MM-DD')
-  const end = timezone.fromUtc(dateRange.endDate).format('YYYY-MM-DD')
+  const start = timezone.formatDateDisplay(dateRange.startDate)
+  const end = timezone.formatDateDisplay(dateRange.endDate)
   return `${start} - ${end}`
 }
 

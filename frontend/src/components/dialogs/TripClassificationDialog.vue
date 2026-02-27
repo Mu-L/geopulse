@@ -238,7 +238,7 @@ const fetchClassificationDetails = async (tripId) => {
 // Formatting helpers
 const formatDateTime = (timestamp) => {
   if (!timestamp) return 'N/A'
-  return timezone.format(timestamp, 'YYYY-MM-DD HH:mm:ss')
+  return `${timezone.formatDateDisplay(timestamp)} ${timezone.format(timestamp, 'HH:mm:ss')}`
 }
 
 const formatDuration = (seconds) => {

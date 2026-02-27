@@ -10,6 +10,7 @@ import {UserProfilePage} from "../pages/UserProfilePage.js";
 import {FavoritesManagementPage} from "../pages/FavoritesManagementPage.js";
 import {GeocodingManagementPage} from "../pages/GeocodingManagementPage.js";
 import {PeriodTagsManagementPage} from "../pages/PeriodTagsManagementPage.js";
+import {DateFormatTestHelper} from './date-format-test-helper.js';
 
 /**
  * Centralized test setup utilities to eliminate duplication
@@ -24,6 +25,7 @@ export class TestSetupHelper {
     const testUser = userData || TestData.users.existing;
 
     await UserFactory.createUser(page, testUser);
+    await DateFormatTestHelper.applyDateFormatIfProvided(dbManager, testUser);
     await loginPage.navigate();
     await loginPage.login(testUser.email, testUser.password);
     await TestHelpers.waitForNavigation(page, '**/app/timeline');

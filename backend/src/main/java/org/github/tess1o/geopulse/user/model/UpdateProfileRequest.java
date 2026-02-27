@@ -22,4 +22,7 @@ public class UpdateProfileRequest {
 
     @Size(max = 1000, message = "Default redirect URL cannot exceed 1000 characters")
     private String defaultRedirectUrl;
+
+    @Pattern(regexp = "^(MDY|DMY|YMD)$", message = "Date format must be one of: MDY, DMY, YMD")
+    private String dateFormat;
 }

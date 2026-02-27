@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import {fileURLToPath} from 'url';
 import {dirname} from 'path';
+import {DateFormatValues} from '../utils/date-format-test-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -200,6 +201,36 @@ test.describe('Data Export & Import', () => {
 
             // Export button should not be disabled
             expect(await exportImportPage.isExportButtonDisabled()).toBe(false);
+        });
+
+        test('should display export date range inputs using user date format', async ({page, dbManager}) => {
+            const loginPage = new LoginPage(page);
+            const exportImportPage = new DataExportImportPage(page);
+            const testUser = { ...TestData.users.existing };
+
+            await UserFactory.createUser(page, testUser);
+            const user = await dbManager.getUserByEmail(testUser.email);
+            await dbManager.client.query(
+                'UPDATE users SET date_format = $1 WHERE id = $2',
+                [DateFormatValues.DMY, user.id]
+            );
+
+            await loginPage.navigate();
+            await loginPage.login(testUser.email, testUser.password);
+            await TestHelpers.waitForNavigation(page, '**/app/timeline');
+
+            await exportImportPage.navigate();
+            await exportImportPage.waitForPageLoad();
+
+            await exportImportPage.setDateRange('2025-09-21', '2025-09-24');
+
+            const startValue = await page.locator(exportImportPage.selectors.export.startDate).inputValue();
+            const endValue = await page.locator(exportImportPage.selectors.export.endDate).inputValue();
+
+            expect(startValue).toMatch(/21\/09\/(?:20)?25/);
+            expect(startValue).not.toMatch(/09\/21\/(?:20)?25/);
+            expect(endValue).toMatch(/24\/09\/(?:20)?25/);
+            expect(endValue).not.toMatch(/09\/24\/(?:20)?25/);
         });
 
         test('should use date range presets', async ({page, dbManager}) => {

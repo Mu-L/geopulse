@@ -7,6 +7,7 @@ import {UserFactory} from '../utils/user-factory.js';
 import {TestConfig} from '../config/test-config.js';
 import {ValidationHelpers} from '../utils/validation-helpers.js';
 import {GeocodingFactory} from '../utils/geocoding-factory.js';
+import {DateFormatValues} from '../utils/date-format-test-helper.js';
 import {randomUUID} from 'crypto';
 
 test.describe('Dashboard', () => {
@@ -260,8 +261,10 @@ test.describe('Dashboard', () => {
       const sevenDaysRange = await dashboardPage.getSevenDaysRange();
       const thirtyDaysRange = await dashboardPage.getThirtyDaysRange();
       
-      // Verify date ranges follow expected format (MM/DD - MM/DD)
-      const dateRangePattern = /\d{2}\/\d{2}\s*-\s*\d{2}\/\d{2}/;
+      // Accept user-facing date ranges across supported formats:
+      // MM/DD[/YYYY], DD/MM[/YYYY], or YYYY-MM-DD
+      const dateToken = '(?:\\d{2}\\/\\d{2}(?:\\/\\d{4})?|\\d{4}-\\d{2}-\\d{2})';
+      const dateRangePattern = new RegExp(`^${dateToken}\\s*-\\s*${dateToken}$`);
       
       if (sevenDaysRange) {
         expect(dateRangePattern.test(sevenDaysRange)).toBe(true);
@@ -318,6 +321,47 @@ test.describe('Dashboard', () => {
         expect(thirtyDaysRange.length).toBeGreaterThan(0);
         expect(thirtyDaysRange).toMatch(/\d{2}\/\d{2}/);
       }
+    });
+
+    test('should apply user date format to dashboard period ranges', async ({page, dbManager}) => {
+      const loginPage = new LoginPage(page);
+      const dashboardPage = new DashboardPage(page);
+      const testUser = { ...TestData.users.existing, timezone: 'UTC' };
+
+      await UserFactory.createUser(page, testUser);
+      const user = await dbManager.getUserByEmail(testUser.email);
+      await dbManager.client.query('UPDATE users SET date_format = $1 WHERE id = $2', [DateFormatValues.DMY, user.id]);
+
+      await loginPage.navigate();
+      await loginPage.login(testUser.email, testUser.password);
+      await TestHelpers.waitForNavigation(page, '**/app/timeline');
+
+      await insertDashboardTestData(dbManager, user.id);
+
+      await dashboardPage.navigate();
+      await dashboardPage.waitForPageLoad();
+      await dashboardPage.waitForLoadingComplete();
+
+      const ranges = [
+        await dashboardPage.getSelectedPeriodRange(),
+        await dashboardPage.getSevenDaysRange(),
+        await dashboardPage.getThirtyDaysRange()
+      ].filter(Boolean);
+
+      expect(ranges.length).toBeGreaterThan(0);
+
+      const fragments = ranges.flatMap(range =>
+        [...range.matchAll(/(\d{2})\/(\d{2})/g)].map(match => ({
+          first: Number(match[1]),
+          second: Number(match[2]),
+          raw: match[0]
+        }))
+      );
+
+      expect(fragments.length).toBeGreaterThan(0);
+
+      const impossibleForDmy = fragments.find(f => f.second > 12);
+      expect(impossibleForDmy).toBeUndefined();
     });
   });
 

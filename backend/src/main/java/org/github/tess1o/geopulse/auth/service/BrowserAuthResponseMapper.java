@@ -22,6 +22,7 @@ public class BrowserAuthResponseMapper {
                 .customMapTileUrl(authResponse.getCustomMapTileUrl())
                 .measureUnit(authResponse.getMeasureUnit())
                 .defaultRedirectUrl(authResponse.getDefaultRedirectUrl())
+                .dateFormat(authResponse.getDateFormat())
                 .build();
 
         return BrowserAuthResponse.builder()

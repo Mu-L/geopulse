@@ -113,8 +113,8 @@ const navigateToReports = () => {
   // Navigate to Timeline Reports with current date range
   const { dateRange } = dateRangeStore
   if (dateRange && dateRange.length === 2) {
-    const start = timezone.format(dateRange[0], 'MM/DD/YYYY')
-    const end = timezone.format(dateRange[1], 'MM/DD/YYYY')
+    const start = timezone.formatUrlDate(dateRange[0])
+    const end = timezone.formatUrlDate(dateRange[1])
     router.push(`/app/timeline-reports?start=${start}&end=${end}`)
   } else {
     router.push('/app/timeline-reports')

@@ -5,9 +5,16 @@
     @contextmenu="showContextMenu"
   >
     <template #title>
-      <p class="timeline-timestamp">
-        🕐 {{ getTimestampText() }}
-      </p>
+      <div class="timeline-title-row">
+        <p class="timeline-timestamp">
+          🕐 {{ getTimestampText() }}
+        </p>
+        <TimelinePhotoPreviewTrigger
+          :photos="matchingPhotos"
+          accent-color="var(--gp-primary-dark)"
+          @photo-show-on-map="handlePhotoShowOnMap"
+        />
+      </div>
     </template>
 
     <template #subtitle>
@@ -37,6 +44,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTimezone } from '@/composables/useTimezone'
 import { formatDurationSmart } from '@/utils/calculationsHelpers'
+import { useTimelineCardPhotoMatching } from '@/composables/useTimelineCardPhotoMatching'
+import TimelinePhotoPreviewTrigger from './TimelinePhotoPreviewTrigger.vue'
 
 const timezone = useTimezone()
 const router = useRouter()
@@ -50,11 +59,15 @@ const props = defineProps({
   currentDate: {
     type: String,
     required: true
+  },
+  immichPhotos: {
+    type: Array,
+    default: () => []
   }
 })
 
 // Emits
-const emit = defineEmits(['click', 'export-gpx'])
+const emit = defineEmits(['click', 'export-gpx', 'photo-show-on-map'])
 
 const contextMenu = ref(null)
 
@@ -111,6 +124,14 @@ const contextMenuItems = computed(() => {
   return items
 })
 
+const { matchingPhotos } = useTimelineCardPhotoMatching({
+  itemRef: computed(() => props.stayItem),
+  immichPhotosRef: computed(() => props.immichPhotos),
+  durationField: 'stayDuration',
+  currentDateRef: computed(() => props.currentDate),
+  clampToCurrentDay: true
+})
+
 // Methods
 const getTimestampText = () => {
   return timezone.getOvernightTimestampText(props.stayItem, props.currentDate)
@@ -122,6 +143,10 @@ const getOnThisDayText = () => {
 
 const handleClick = () => {
   emit('click', props.stayItem)
+}
+
+const handlePhotoShowOnMap = (photo) => {
+  emit('photo-show-on-map', photo)
 }
 
 const showContextMenu = (event) => {
@@ -218,6 +243,13 @@ const navigateToCountryDetails = () => {
   font-size: 0.95rem;
   margin: 0;
   line-height: 1.2;
+}
+
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gp-spacing-sm);
 }
 
 .timeline-subtitle {
