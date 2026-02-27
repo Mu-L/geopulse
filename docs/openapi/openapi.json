@@ -1340,6 +1340,10 @@
           "defaultRedirectUrl" : {
             "maxLength" : 1000,
             "type" : "string"
+          },
+          "dateFormat" : {
+            "pattern" : "^(MDY|DMY|YMD)$",
+            "type" : "string"
           }
         }
       },
@@ -7577,6 +7581,18 @@
     "/api/users/me/immich/photos/search" : {
       "get" : {
         "parameters" : [ {
+          "name" : "city",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "country",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
           "name" : "endDate",
           "in" : "query",
           "schema" : {
@@ -7588,6 +7604,13 @@
           "schema" : {
             "format" : "double",
             "type" : "number"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         }, {
           "name" : "longitude",
@@ -7973,6 +7996,18 @@
             "type" : "string"
           }
         }, {
+          "name" : "city",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "country",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
           "name" : "endDate",
           "in" : "query",
           "schema" : {
@@ -7984,6 +8019,13 @@
           "schema" : {
             "format" : "double",
             "type" : "number"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "schema" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         }, {
           "name" : "longitude",
@@ -8117,7 +8159,7 @@
   },
   "info" : {
     "title" : "GeoPulse API",
-    "version" : "1.18.2",
+    "version" : "1.19.0",
     "description" : "GeoPulse backend REST API documentation.",
     "contact" : {
       "name" : "tess1o",
